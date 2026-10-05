@@ -33,3 +33,7 @@ playwright-report/
 # OS
 .DS_Store
 Thumbs.db
+
+# SwiftPM (Linux test package only)
+shared/swift/.build/
+shared/swift/Package.resolved

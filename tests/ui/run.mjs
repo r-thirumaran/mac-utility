@@ -18,6 +18,25 @@ class Harness {
     const ok = expected instanceof RegExp ? expected.test(String(actual)) : actual === expected;
     if (!ok) throw new Error(`expect failed ${msg}: got ${JSON.stringify(actual)}, want ${expected}`);
   }
+  /** Serve the repository root over HTTP (ES modules cannot be imported from file://). */
+  async serveRepo() {
+    if (this._static) return this._static;
+    const { createServer } = await import('node:http');
+    const { readFile } = await import('node:fs/promises');
+    const { extname, join, normalize } = await import('node:path');
+    const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json' };
+    const srv = createServer(async (req, res) => {
+      const p = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname));
+      try {
+        const data = await readFile(join(root, p));
+        res.writeHead(200, { 'content-type': types[extname(p)] || 'application/octet-stream' }); res.end(data);
+      } catch { res.writeHead(404); res.end('not found'); }
+    });
+    await new Promise(r => srv.listen(0, '127.0.0.1', r));
+    this._staticServer = srv;
+    this._static = `http://127.0.0.1:${srv.address().port}`;
+    return this._static;
+  }
   async screenshot(page, name) {
     await page.screenshot({ path: resolve(root, 'test-results', `${name}.png`), fullPage: true });
   }
@@ -40,7 +59,7 @@ class Harness {
     await page.goto(url, { waitUntil: 'load' });
     return { page, context, url, proc, server: { url } };
   }
-  async cleanup() { for (const p of this.procs) p.kill('SIGTERM'); this.procs = []; }
+  async cleanup() { for (const p of this.procs) p.kill('SIGTERM'); this.procs = []; this._staticServer?.close(); }
 }
 
 const browser = await chromium.launch({ headless: !process.env.HEADED });

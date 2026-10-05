@@ -39,7 +39,7 @@ esac
 
 SOURCES=()
 while IFS= read -r -d '' f; do SOURCES+=("$f"); done \
-  < <(find "$APP_DIR/mac" "$ROOT/shared/swift" -name '*.swift' -not -path '*/Tests/*' -print0 | sort -z)
+  < <(find "$APP_DIR/mac" "$ROOT/shared/swift" -name '*.swift' -not -path '*/Tests/*' -not -name 'Package.swift' -not -path '*/.build/*' -print0 | sort -z)
 
 echo "==> Building $APP_NAME ($CONFIG, ${#SOURCES[@]} sources, target macOS $DEPLOYMENT_TARGET)"
 rm -rf "$APP"

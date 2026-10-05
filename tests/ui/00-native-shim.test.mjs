@@ -1,6 +1,4 @@
 // Exercises shared/ui/native.js in a plain page with a fake WKWebView handler.
-import { resolve } from 'node:path';
-
 export default async function (t) {
   const context = await t.browser.newContext();
   const page = await context.newPage();
@@ -10,9 +8,10 @@ export default async function (t) {
       return { error: { code: 'not_supported', message: 'nope' } };
     } } } };
   });
-  await page.goto('file://' + resolve('shared/ui/..', 'tests/ui/fixtures/shim.html'));
+  const base = await t.serveRepo();
+  await page.goto(`${base}/tests/ui/fixtures/shim.html`);
   const r = await page.evaluate(async () => {
-    const { native } = await import('../../../shared/ui/native.js');
+    const { native } = await import('/shared/ui/native.js');
     const out = { transport: native.transport };
     out.info = await native.call('app.info', { a: 1 });
     try { await native.call('nope'); } catch (e) { out.err = e.code; }
