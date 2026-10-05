@@ -1,0 +1,20 @@
+Edgehop — read me first
+====================
+
+1. Drag Edgehop to the Applications folder next to it.
+
+2. This build is ad-hoc signed (not notarised), so the first launch shows
+   "Apple could not verify Edgehop is free of malware". Nothing is wrong with
+   the download — that is what macOS says about any app that has not been
+   through Apple's paid notarisation. Either:
+
+     a. run in Terminal:   xattr -dr com.apple.quarantine /Applications/Edgehop.app
+     b. or open it once, dismiss the error, then System Settings ▸ Privacy &
+        Security ▸ scroll to Security ▸ "Open Anyway".
+
+   (Right-click ▸ Open no longer works on macOS 15.)
+
+3. Launch Edgehop from Applications. It lives in the menu bar (no Dock icon). The
+   first run walks you through the permissions it needs.
+
+Source and newer builds: https://github.com/r-thirumaran/mac-utility
