@@ -72,6 +72,10 @@ if [[ -d "$ROOT/shared/ui" ]]; then
   mkdir -p "$APP/Contents/Resources/ui/shared"
   cp -R "$ROOT/shared/ui/." "$APP/Contents/Resources/ui/shared/"
 fi
+# The canonical cross-platform key table (used by Edgehop and Reach for HID ⇄ keycode mapping).
+if [[ -f "$ROOT/shared/keymap/hid-keymap.json" ]]; then
+  cp "$ROOT/shared/keymap/hid-keymap.json" "$APP/Contents/Resources/hid-keymap.json"
+fi
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 IDENTITY="${CODESIGN_IDENTITY:--}"

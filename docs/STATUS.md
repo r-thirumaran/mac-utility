@@ -33,7 +33,7 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 - [x] shared/swift (menubar, WKWebView bridge, mini http+ws server, framing, crypto, admin runner) — type-checks on macos-15; XCTest suites run on macOS + Linux in CI
 - [x] shared/ui (native.js bridge shim, base CSS, charts, components, demo) — Playwright test green
 - [ ] Vitals mac / win / ui — agents running (mac backend; win backend + ui)
-- [ ] Edgehop core + mac + win + ui — agent running (core + win + ui); mac not started
+- [ ] Edgehop core + mac + win + ui — agents running (core + win + ui; mac)
 - [ ] Reach agent mac / win + PWA + Capacitor mobile project
 - [x] Icons for every app (`Tools/make_icons.py` → icns, ico, PWA PNGs)
 
