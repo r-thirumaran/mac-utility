@@ -58,3 +58,38 @@ jobs:
             artifacts/**/*.dmg artifacts/**/*.exe artifacts/**/*.apk artifacts/**/SHA256SUMS-*.txt 2>/dev/null \
           || gh release upload "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --clobber \
             artifacts/**/*.dmg artifacts/**/*.exe artifacts/**/*.apk artifacts/**/SHA256SUMS-*.txt
+
+  shared-swift:
+    name: shared/swift (macOS typecheck + tests)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer || true
+          swift --version
+      - name: Type-check every shared source the way the app build compiles it
+        run: |
+          set -euo pipefail
+          SDK="$(xcrun --show-sdk-path --sdk macosx)"
+          FILES=$(find shared/swift/Sources -name '*.swift' | sort)
+          echo "$FILES"
+          swiftc -typecheck -parse-as-library -swift-version 5 \
+            -target arm64-apple-macos14.0 -sdk "$SDK" $FILES
+      - name: swift test
+        working-directory: shared/swift
+        run: swift test
+
+  shared-swift-linux:
+    name: shared/swift (Linux tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.0"
+      - name: swift test
+        working-directory: shared/swift
+        run: |
+          swift --version
+          swift test
