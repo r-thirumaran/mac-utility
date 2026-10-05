@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>UI Kit</title>
+<link rel="stylesheet" href="./base.css">
+<style>
+  /* demo-only chrome; nothing here is part of the kit */
+  .demo-section { scroll-margin-top: 60px; }
+  .demo-section > h2 { display: flex; align-items: baseline; gap: var(--space-2); }
+  .demo-section > h2 code { font-size: var(--text-xs); color: var(--text-faint); font-weight: 400; }
+  .demo-nav { position: sticky; top: 44px; z-index: 10; padding: var(--space-2) 0; background: var(--bg); }
+  .demo-nav a { font-size: var(--text-sm); color: var(--text-muted); padding: 2px 8px; border-radius: var(--radius-full); white-space: nowrap; }
+  .demo-nav a:hover { background: var(--surface-3); color: var(--text); text-decoration: none; }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: var(--space-2); }
+  .swatch { border-radius: var(--radius-md); border: 1px solid var(--border); overflow: hidden; background: var(--surface); }
+  .swatch-color { height: 40px; border-bottom: 1px solid var(--border); }
+  .swatch-name { padding: 5px 8px; font: 500 var(--text-xs) / 1.4 var(--font-mono); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ramp { display: flex; height: 22px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); }
+  .ramp span { flex: 1; }
+  .demo-box { background: var(--accent-soft); color: var(--accent); border-radius: var(--radius-sm); padding: 6px 10px; font-size: var(--text-sm); font-weight: 500; text-align: center; min-width: 0; }
+  .type-sample { display: grid; grid-template-columns: 7ch 1fr; gap: var(--space-2) var(--space-3); align-items: baseline; }
+  .type-sample code { color: var(--text-faint); font-size: var(--text-xs); }
+  .proc-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+</style>
+</head>
+<body>
+
+<header class="toolbar">
+  <div class="toolbar-title">UI Kit</div>
+  <span class="badge badge-accent hide-phone">shared/ui</span>
+  <span class="text-muted text-sm hide-phone" id="uptime" aria-label="Demo uptime"></span>
+  <div class="segmented ml-auto" id="theme-switch" aria-label="Theme">
+    <button data-value="auto" aria-pressed="true">Auto</button>
+    <button data-value="light">Light</button>
+    <button data-value="dark">Dark</button>
+  </div>
+</header>
+
+<main class="page stack gap-6">
+  <nav class="demo-nav cluster gap-1" aria-label="Sections">
+    <a href="#sec-tokens">Tokens</a><a href="#sec-typography">Type</a><a href="#sec-layout">Layout</a>
+    <a href="#sec-buttons">Buttons</a><a href="#sec-forms">Forms</a><a href="#sec-tabs">Tabs</a>
+    <a href="#sec-badges">Badges</a><a href="#sec-stats">Stats</a><a href="#sec-charts">Charts</a>
+    <a href="#sec-gauges">Gauges</a><a href="#sec-meters">Meters</a><a href="#sec-table">Table</a>
+    <a href="#sec-settings">Settings</a><a href="#sec-feedback">Feedback</a><a href="#sec-empty">Empty</a>
+  </nav>
+
+  <!-- ============================================================ tokens -->
+  <section class="demo-section stack gap-3" id="sec-tokens" data-section="tokens">
+    <h2>Tokens <code>base.css :root</code></h2>
+    <p class="text-muted">Every color is a custom property; dark mode swaps the values under <code>prefers-color-scheme</code> or <code>[data-theme]</code>.</p>
+    <div class="swatches" id="swatches"></div>
+    <h3>Chart palette <code class="text-faint text-xs">--chart-1 … --chart-8 (fixed order)</code></h3>
+    <div class="swatches" id="chart-swatches"></div>
+    <h3>Sequential ramp <code class="text-faint text-xs">--chart-seq-1 … 7</code></h3>
+    <div class="ramp" id="seq-ramp" role="img" aria-label="Sequential blue ramp"></div>
+  </section>
+
+  <!-- ======================================================== typography -->
+  <section class="demo-section stack gap-3" id="sec-typography" data-section="typography">
+    <h2>Typography <code>system font stack</code></h2>
+    <div class="card type-sample">
+      <code>title</code><div class="title">Activity — 8 cores, 16 GB</div>
+      <code>h2</code><h2>Section heading</h2>
+      <code>h3</code><h3>Card heading</h3>
+      <code>body</code><div>Body text at 13 px. Vitals samples CPU, memory, GPU and network once a second and keeps two minutes of history.</div>
+      <code>muted</code><div class="text-muted">Secondary text uses <code>--text-muted</code>; hints use <code>--text-faint</code>.</div>
+      <code>mono</code><div class="mono text-sm">com.thiru.vitals · pid 48213</div>
+      <code>tabular</code><div class="tabular">1,234.56 MB · 0,000.00 MB</div>
+      <code>link</code><div><a href="#sec-tokens">A text link</a> next to <span class="text-success">success</span>, <span class="text-warning">warning</span> and <span class="text-danger">danger</span> ink.</div>
+    </div>
+  </section>
+
+  <!-- ============================================================ layout -->
+  <section class="demo-section stack gap-3" id="sec-layout" data-section="layout">
+    <h2>Layout <code>.stack .row .cluster .grid .gap-*</code></h2>
+    <div class="grid" style="--grid-min: 260px">
+      <div class="card stack gap-2">
+        <div class="card-title">.stack</div>
+        <div class="demo-box">one</div><div class="demo-box">two</div><div class="demo-box">three</div>
+      </div>
+      <div class="card stack gap-2">
+        <div class="card-title">.row</div>
+        <div class="row"><div class="demo-box grow">grow</div><div class="demo-box">fixed</div></div>
+        <div class="card-title">.cluster</div>
+        <div class="cluster"><span class="demo-box">wraps</span><span class="demo-box">when</span><span class="demo-box">narrow</span><span class="demo-box">like</span><span class="demo-box">tags</span></div>
+      </div>
+      <div class="card stack gap-2">
+        <div class="card-title">.grid</div>
+        <div class="grid gap-2" style="--grid-min: 70px"><div class="demo-box">1</div><div class="demo-box">2</div><div class="demo-box">3</div><div class="demo-box">4</div><div class="demo-box">5</div><div class="demo-box">6</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================== buttons -->
+  <section class="demo-section stack gap-3" id="sec-buttons" data-section="buttons">
+    <h2>Buttons <code>.btn .btn-primary .btn-secondary .btn-danger .btn-ghost .btn-sm .btn-lg .btn-icon</code></h2>
+    <div class="card stack gap-3">
+      <div class="cluster">
+        <button class="btn btn-primary">Apply</button>
+        <button class="btn btn-secondary">Cancel</button>
+        <button class="btn btn-danger">Force Quit</button>
+        <button class="btn btn-ghost">Learn more…</button>
+        <button class="btn btn-primary" disabled>Disabled</button>
+        <button class="btn btn-secondary" disabled>Disabled</button>
+      </div>
+      <div class="cluster">
+        <button class="btn btn-sm btn-primary">Small</button>
+        <button class="btn btn-sm">Small</button>
+        <button class="btn btn-primary">Default</button>
+        <button class="btn btn-lg btn-primary">Large</button>
+        <button class="btn btn-lg">Large</button>
+      </div>
+      <div class="cluster">
+        <button class="btn btn-icon" id="btn-icon-refresh" aria-label="Refresh"></button>
+        <button class="btn btn-icon btn-ghost" id="btn-icon-more" aria-label="More"></button>
+        <button class="btn btn-primary" id="btn-with-icon"></button>
+        <span class="btn-group"><button class="btn">Day</button><button class="btn">Week</button><button class="btn">Month</button></span>
+        <button class="btn btn-ghost btn-danger">Remove</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= forms -->
+  <section class="demo-section stack gap-3" id="sec-forms" data-section="forms">
+    <h2>Forms <code>.input .select .toggle .slider .segmented .check</code></h2>
+    <div class="grid" style="--grid-min: 280px">
+      <div class="card stack gap-3">
+        <div class="field"><label class="label" for="in-name">Machine name</label><input class="input" id="in-name" value="Thiru’s MacBook Pro"></div>
+        <div class="field"><label class="label" for="in-search">Search</label><input class="input" id="in-search" type="search" placeholder="Filter processes…"></div>
+        <div class="field is-invalid"><label class="label" for="in-port">Port</label><input class="input" id="in-port" value="99999" inputmode="numeric"><span class="hint">Must be between 1024 and 65535.</span></div>
+        <div class="field"><label class="label" for="in-notes">Notes</label><textarea class="input" id="in-notes" rows="2" placeholder="Optional"></textarea></div>
+        <div class="row"><input class="input input-sm" placeholder="Small input" aria-label="Small input"><input class="input input-lg" placeholder="Large input" aria-label="Large input"></div>
+      </div>
+      <div class="card stack gap-3">
+        <div class="field">
+          <span class="label">Sort by</span>
+          <span class="select"><select aria-label="Sort by"><option>CPU</option><option selected>Memory</option><option>Network</option><option>Disk</option></select></span>
+        </div>
+        <div class="field">
+          <span class="label">Lid close (on battery)</span>
+          <span class="select is-block"><select aria-label="Lid close"><option>Sleep</option><option>Do nothing</option><option>Hibernate</option><option>Shut down</option></select></span>
+        </div>
+        <label class="toggle"><input type="checkbox" role="switch" checked><span class="toggle-track"></span><span>Launch at login</span></label>
+        <label class="toggle"><input type="checkbox" role="switch"><span class="toggle-track"></span><span>Show in menu bar</span></label>
+        <label class="toggle"><input type="checkbox" role="switch" checked disabled><span class="toggle-track"></span><span>Managed by policy</span></label>
+        <label class="check"><input type="checkbox" checked><span>Also sync clipboard</span></label>
+        <div class="field">
+          <label class="label" for="slider-a">Display sleep <span class="slider-value" id="slider-a-value"></span></label>
+          <div class="slider-row"><span class="text-faint text-xs">1 min</span><input class="slider" id="slider-a" type="range" min="1" max="60" value="15"><span class="text-faint text-xs">1 h</span></div>
+        </div>
+        <div class="field">
+          <label class="label" for="slider-b">Switch delay</label>
+          <input class="slider" id="slider-b" type="range" min="0" max="500" step="10" value="120">
+        </div>
+        <div class="cluster">
+          <div class="segmented" id="view-switch" aria-label="View"><button data-value="list" aria-pressed="true">List</button><button data-value="grid">Grid</button><button data-value="graph">Graph</button></div>
+          <div class="segmented" aria-label="Range (radio variant)">
+            <label><input type="radio" name="range" value="1m" checked>1 m</label>
+            <label><input type="radio" name="range" value="5m">5 m</label>
+            <label><input type="radio" name="range" value="1h">1 h</label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================== tabs -->
+  <section class="demo-section stack gap-3" id="sec-tabs" data-section="tabs">
+    <h2>Tabs <code>.tabs .tab · tabs()</code></h2>
+    <div class="card" id="demo-tabs">
+      <div class="tabs">
+        <button class="tab" data-tab="overview" data-panel="panel-overview" aria-selected="true">Overview</button>
+        <button class="tab" data-tab="processes" data-panel="panel-processes">Processes</button>
+        <button class="tab" data-tab="energy" data-panel="panel-energy">Energy</button>
+        <button class="tab" data-tab="network" data-panel="panel-network">Network</button>
+      </div>
+      <div class="tab-panel" id="panel-overview">Overview panel. Use <span class="kbd">←</span><span class="kbd">→</span> to move between tabs.</div>
+      <div class="tab-panel" id="panel-processes" hidden>Processes panel.</div>
+      <div class="tab-panel" id="panel-energy" hidden>Energy panel.</div>
+      <div class="tab-panel" id="panel-network" hidden>Network panel.</div>
+    </div>
+    <div class="tabs is-pills" aria-label="Pill tabs"><button class="tab" aria-selected="true">All</button><button class="tab">Apps</button><button class="tab">System</button></div>
+  </section>
+
+  <!-- ============================================================ badges -->
+  <section class="demo-section stack gap-3" id="sec-badges" data-section="badges">
+    <h2>Badges &amp; keys <code>.badge .kbd</code></h2>
+    <div class="card stack gap-3">
+      <div class="cluster">
+        <span class="badge">Default</span>
+        <span class="badge badge-accent">Accent</span>
+        <span class="badge badge-success badge-dot">Connected</span>
+        <span class="badge badge-warning badge-dot">Degraded</span>
+        <span class="badge badge-danger badge-dot">Offline</span>
+        <span class="badge badge-outline">Outline</span>
+        <span class="badge badge-lg badge-accent">Large</span>
+      </div>
+      <div class="cluster">
+        <span>Switch display</span><span class="kbd">⌃</span><span class="kbd">⌥</span><span class="kbd">→</span>
+        <span class="text-faint">·</span>
+        <span>Quit</span><span class="kbd">⌘</span><span class="kbd">Q</span>
+        <span class="text-faint">·</span>
+        <span>Windows</span><span class="kbd">Ctrl</span><span class="kbd">Alt</span><span class="kbd">Del</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= stats -->
+  <section class="demo-section stack gap-3" id="sec-stats" data-section="stats">
+    <h2>Stat tiles <code>.stat · Sparkline</code></h2>
+    <div class="grid" style="--grid-min: 200px">
+      <div class="card stat" id="stat-cpu">
+        <div class="stat-label">CPU</div>
+        <div class="stat-value"><span id="stat-cpu-value">–</span><span class="stat-unit">%</span></div>
+        <div class="stat-delta" id="stat-cpu-delta">vs 1 min ago</div>
+        <div class="stat-trend"><canvas id="spark-cpu" aria-label="CPU history"></canvas></div>
+      </div>
+      <div class="card stat" id="stat-mem">
+        <div class="stat-label">Memory used</div>
+        <div class="stat-value" id="stat-mem-value">–</div>
+        <div class="stat-delta" id="stat-mem-delta">vs 1 min ago</div>
+        <div class="stat-trend"><canvas id="spark-mem" aria-label="Memory history"></canvas></div>
+      </div>
+      <div class="card stat" id="stat-net">
+        <div class="stat-label">Network ↓</div>
+        <div class="stat-value" id="stat-net-value">–</div>
+        <div class="stat-delta" id="stat-net-delta">vs 1 min ago</div>
+        <div class="stat-trend"><canvas id="spark-net" aria-label="Download history"></canvas></div>
+      </div>
+      <div class="card stat" id="stat-disk">
+        <div class="stat-label">Disk write</div>
+        <div class="stat-value" id="stat-disk-value">–</div>
+        <div class="stat-delta" id="stat-disk-delta">vs 1 min ago</div>
+        <div class="stat-trend"><canvas id="spark-disk" aria-label="Disk write history"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ charts -->
+  <section class="demo-section stack gap-3" id="sec-charts" data-section="charts">
+    <h2>Line chart <code>LineChart</code></h2>
+    <div class="card">
+      <div class="card-header">
+        <div><div class="card-title">CPU per core</div><div class="card-subtitle">Last 2 minutes · hover or focus the chart for a readout · click a key to hide a core</div></div>
+        <span class="badge badge-success badge-dot">Live</span>
+      </div>
+      <div class="chart" style="--chart-h: 240px"><canvas id="line-cores"></canvas></div>
+    </div>
+    <div class="grid" style="--grid-min: 280px">
+      <div class="card">
+        <div class="card-header"><div class="card-title">Network</div></div>
+        <div class="chart" style="--chart-h: 180px"><canvas id="line-net"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Memory pressure</div><span class="text-muted text-sm">single series, area wash, no legend</span></div>
+        <div class="chart" style="--chart-h: 180px"><canvas id="line-pressure"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ gauges -->
+  <section class="demo-section stack gap-3" id="sec-gauges" data-section="gauges">
+    <h2>Gauges &amp; stacked bar <code>RingGauge · BarMeter</code></h2>
+    <div class="grid" style="--grid-min: 280px">
+      <div class="card">
+        <div class="card-header"><div class="card-title">Load</div><span class="text-muted text-sm">severity in the fill</span></div>
+        <div class="cluster gap-4 justify-center">
+          <div class="gauge"><canvas id="gauge-cpu"></canvas></div>
+          <div class="gauge"><canvas id="gauge-gpu"></canvas></div>
+          <div class="gauge" style="--gauge-size: 84px"><canvas id="gauge-battery"></canvas></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Memory</div><span class="text-muted text-sm" id="mem-total"></span></div>
+        <div class="barmeter-lg" id="barmeter-mem"></div>
+        <div class="card-footer row justify-between text-sm"><span class="text-muted">Swap used</span><span class="tabular" id="mem-swap">–</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ meters -->
+  <section class="demo-section stack gap-3" id="sec-meters" data-section="meters">
+    <h2>Meters <code>.meter .meter-warning .meter-danger</code></h2>
+    <div class="card stack gap-3">
+      <div class="meter" style="--value: 62%"><span class="meter-label" style="min-width: 120px">Macintosh HD</span><span class="meter-bar"><span class="meter-fill"></span></span><span class="meter-text">62%</span></div>
+      <div class="meter meter-warning" style="--value: 84%"><span class="meter-label" style="min-width: 120px">Data</span><span class="meter-bar"><span class="meter-fill"></span></span><span class="meter-text">84%</span></div>
+      <div class="meter meter-danger" style="--value: 96%"><span class="meter-label" style="min-width: 120px">Time Machine</span><span class="meter-bar"><span class="meter-fill"></span></span><span class="meter-text">96%</span></div>
+      <div class="meter meter-success" style="--value: 100%"><span class="meter-label" style="min-width: 120px">Backup</span><span class="meter-bar"><span class="meter-fill"></span></span><span class="meter-text">Done</span></div>
+      <hr class="divider">
+      <div class="meter meter-lg" id="meter-live"><span class="meter-label" style="min-width: 120px">GPU (live)</span><span class="meter-bar"><span class="meter-fill"></span></span><span class="meter-text">–</span></div>
+    </div>
+  </section>
+
+  <!-- ============================================================= table -->
+  <section class="demo-section stack gap-3" id="sec-table" data-section="table">
+    <h2>Table <code>.table-wrap .table (sticky header, dense rows)</code></h2>
+    <div class="card is-flush">
+      <div class="card-header"><div class="card-title">Processes</div><div class="row"><input class="input input-sm" placeholder="Filter" aria-label="Filter processes" style="width: 140px"><button class="btn btn-sm">Columns</button></div></div>
+      <div class="table-wrap" style="--table-max-h: 260px">
+        <table class="table" id="proc-table">
+          <thead><tr><th>Process</th><th class="num">PID</th><th class="num" aria-sort="descending">CPU</th><th class="num">Memory</th><th class="num">Threads</th><th class="cell-fill">Energy</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================== settings -->
+  <section class="demo-section stack gap-3" id="sec-settings" data-section="settings">
+    <h2>Settings list <code>.settings .setting</code></h2>
+    <div class="settings">
+      <div class="setting">
+        <div class="setting-main"><div class="setting-label">Prevent sleep while Edgehop is active</div><div class="setting-desc">Keeps the display and system awake while a remote machine has control.</div></div>
+        <div class="setting-control"><label class="toggle"><input type="checkbox" role="switch" checked aria-label="Prevent sleep"><span class="toggle-track"></span></label></div>
+      </div>
+      <div class="setting">
+        <div class="setting-main"><div class="setting-label">Lid close on power</div><div class="setting-desc">What happens when the lid closes while plugged in.</div></div>
+        <div class="setting-control"><span class="select"><select aria-label="Lid close on power"><option>Sleep</option><option selected>Do nothing</option><option>Display off</option></select></span></div>
+      </div>
+      <div class="setting">
+        <div class="setting-main"><div class="setting-label">Edge switch delay</div><div class="setting-desc">Hold the cursor at the edge this long before switching machines.</div></div>
+        <div class="setting-control" style="width: 220px"><input class="slider" id="slider-delay" type="range" min="0" max="1000" step="50" value="250" aria-label="Edge switch delay"><span class="slider-value" id="slider-delay-value"></span></div>
+      </div>
+      <div class="setting">
+        <div class="setting-main"><div class="setting-label">Hotkey</div><div class="setting-desc">Switch to the next machine.</div></div>
+        <div class="setting-control"><span class="kbd">⌃</span><span class="kbd">⌥</span><span class="kbd">Tab</span><button class="btn btn-sm">Change…</button></div>
+      </div>
+      <div class="setting">
+        <div class="setting-main"><div class="setting-label">Accessibility</div><div class="setting-desc">Required to move the cursor and type on this Mac.</div></div>
+        <div class="setting-control"><span class="badge badge-danger badge-dot">Not granted</span><button class="btn btn-sm btn-primary">Open Settings</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================== feedback -->
+  <section class="demo-section stack gap-3" id="sec-feedback" data-section="feedback">
+    <h2>Dialog, toast, sheet <code>confirmDialog() toast() .sheet</code></h2>
+    <div class="card stack gap-3">
+      <div class="cluster">
+        <button class="btn" id="btn-toast">Toast</button>
+        <button class="btn" id="btn-toast-success">Success toast</button>
+        <button class="btn" id="btn-toast-warning">Warning toast</button>
+        <button class="btn" id="btn-toast-danger">Danger toast</button>
+      </div>
+      <div class="cluster">
+        <button class="btn btn-primary" id="btn-confirm">Confirm…</button>
+        <button class="btn btn-danger" id="btn-delete">Delete…</button>
+        <button class="btn" id="btn-sheet">Open sheet</button>
+        <span class="text-muted text-sm" id="confirm-result"></span>
+      </div>
+    </div>
+    <dialog class="sheet" id="demo-sheet" aria-labelledby="demo-sheet-title">
+      <div class="sheet-grabber"></div>
+      <div class="sheet-title" id="demo-sheet-title">MacBook Pro</div>
+      <div class="sheet-body text-muted text-sm text-center">Connected · 192.168.1.24 · last seen <span id="sheet-seen"></span></div>
+      <div class="sheet-actions">
+        <button class="btn btn-primary">Take control</button>
+        <button class="btn">Send clipboard</button>
+        <button class="btn btn-ghost btn-danger">Unpair</button>
+        <button class="btn btn-ghost" id="btn-sheet-close">Cancel</button>
+      </div>
+    </dialog>
+  </section>
+
+  <!-- ============================================================= empty -->
+  <section class="demo-section stack gap-3" id="sec-empty" data-section="empty">
+    <h2>Empty state <code>.empty-state</code></h2>
+    <div class="card">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-state-title">No machines paired</div>
+        <div class="empty-state-text">Install Edgehop on another Mac or PC on this network and it will show up here.</div>
+        <button class="btn btn-primary" id="btn-empty-action">Pair a machine…</button>
+      </div>
+    </div>
+  </section>
+
+  <footer class="text-faint text-xs text-center">shared/ui · plain HTML, CSS and ES modules · last updated <span id="last-updated"></span></footer>
+</main>
+
+<script type="module" src="./demo.js"></script>
+</body>
+</html>
