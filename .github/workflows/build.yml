@@ -39,10 +39,85 @@ jobs:
             dist-out/SHA256SUMS-*.txt
           if-no-files-found: error
 
+  go-linux:
+    name: Go + web UI tests (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: gofmt
+        run: test -z "$(gofmt -l shared apps 2>/dev/null)" || { gofmt -l shared apps; exit 1; }
+      - name: go vet (linux + windows)
+        run: |
+          go vet ./...
+          GOOS=windows GOARCH=amd64 go vet ./...
+      - name: go test
+        run: go test ./... 2>&1 | tail -60
+      - name: Cross-compile Windows executables
+        run: |
+          mkdir -p dist-out
+          for d in apps/*/win; do
+            app=$(basename "$(dirname "$d")"); [ -f "$d/main.go" ] || continue
+            make "exe-$app"
+          done
+          ls -la dist-out || true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Playwright
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Web UI tests
+        run: node tests/ui/run.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-screenshots
+          path: test-results/*.png
+          if-no-files-found: ignore
+
+  go-windows:
+    name: Go tests + exe build (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: go vet + test (native Windows)
+        shell: bash
+        run: |
+          go vet ./...
+          go test ./... 2>&1 | tail -60
+      - name: Build Windows executables
+        shell: bash
+        run: |
+          mkdir -p dist-out
+          for d in apps/*/win; do
+            app=$(basename "$(dirname "$d")"); [ -f "$d/main.go" ] || continue
+            make "exe-$app"
+          done
+          ls -la dist-out || true
+      - name: Checksums
+        shell: bash
+        run: cd dist-out && (ls *.exe >/dev/null 2>&1 && sha256sum *.exe | tee SHA256SUMS-windows.txt || echo "no executables yet")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: |
+            dist-out/*.exe
+            dist-out/SHA256SUMS-*.txt
+          if-no-files-found: ignore
+
   release:
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [macos]
+    needs: [macos, go-linux, go-windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
