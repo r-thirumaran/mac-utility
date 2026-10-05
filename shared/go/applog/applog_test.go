@@ -1,9 +1,9 @@
 package applog
 
 import (
-	"runtime"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
