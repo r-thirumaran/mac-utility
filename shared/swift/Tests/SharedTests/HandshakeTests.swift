@@ -161,9 +161,10 @@ final class HandshakeTests: XCTestCase {
             XCTAssertEqual(error as? SecureChannelError, .decryptionFailed)
         }
         XCTAssertTrue(acceptorChannel.isBroken)
-        // Nothing was trusted.
-        acceptor.confirmAuthenticated()
+        // The transport only calls confirmAuthenticated() after the auth frame opened, which
+        // it never did here — so nothing was trusted on either side.
         XCTAssertNil(pc.trust.trustedKey(for: mac.identity.id))
+        XCTAssertNil(mac.trust.trustedKey(for: pc.identity.id))
     }
 
     // MARK: - Rejections
@@ -358,8 +359,10 @@ final class HandshakeTests: XCTestCase {
                           EdgehopKDF.presharedKey(code: "123457", localID: "aaa", peerID: "bbb"))
         XCTAssertEqual(EdgehopKDF.presharedKey(code: nil, localID: "a", peerID: "b"), Data(count: 32))
         XCTAssertEqual(EdgehopKDF.transcriptHash(hello: Data("h".utf8), helloAck: Data("a".utf8)).count, 32)
+        // The transcript is a plain concatenation (the JSON messages are self-delimiting), so only
+        // genuinely different bytes must produce different hashes.
         XCTAssertNotEqual(EdgehopKDF.transcriptHash(hello: Data("h".utf8), helloAck: Data("a".utf8)),
-                          EdgehopKDF.transcriptHash(hello: Data("ha".utf8), helloAck: Data()))
+                          EdgehopKDF.transcriptHash(hello: Data("h".utf8), helloAck: Data("b".utf8)))
     }
 
     func testGeneratedCodesAreSixDigits() {

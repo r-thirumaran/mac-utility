@@ -15,7 +15,7 @@ import Crypto
 /// object, or an array of them):
 ///
 /// ```
-/// {"initiator": {"staticPriv": hex, "ephemeralPriv": hex, "id", "name", "plat"},
+/// {"vectors": [{"initiator": {"staticPriv": hex, "ephPriv": hex, "id", "name", "plat"},
 ///  "acceptor":  {…same…},
 ///  "pair": bool, "code": string|null,
 ///  "hello": string, "helloAck": string,
@@ -45,7 +45,7 @@ final class HandshakeVectorTests: XCTestCase {
 
         init(_ object: [String: Any]) throws {
             let staticHex = try XCTUnwrap(object["staticPriv"] as? String, "staticPriv")
-            let ephemeralHex = try XCTUnwrap(object["ephemeralPriv"] as? String, "ephemeralPriv")
+            let ephemeralHex = try XCTUnwrap((object["ephemeralPriv"] ?? object["ephPriv"]) as? String, "ephemeralPriv/ephPriv")
             identity = try Identity(rawPrivateKey: try XCTUnwrap(Data(hexString: staticHex)))
             ephemeral = try Curve25519.KeyAgreement.PrivateKey(
                 rawRepresentation: try XCTUnwrap(Data(hexString: ephemeralHex)))
@@ -84,13 +84,14 @@ final class HandshakeVectorTests: XCTestCase {
     private func check(_ vector: [String: Any], label: String) throws {
         let initiatorSide = try Side(try XCTUnwrap(vector["initiator"] as? [String: Any], "\(label).initiator"))
         let acceptorSide = try Side(try XCTUnwrap(vector["acceptor"] as? [String: Any], "\(label).acceptor"))
-        let code = vector["code"] as? String
+        // Go writes "" for "no code"; treat empty as nil.
+        let code = (vector["code"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let expectedHello = vector["hello"] as? String
         let expectedAck = vector["helloAck"] as? String
 
         // The `pair` flags each side put on the wire decide trust requirements; take them
         // from the recorded messages when present, else from the top-level flag.
-        let topLevelPair = (vector["pair"] as? Bool) ?? (code != nil)
+        let topLevelPair = ((vector["pair"] ?? vector["pairing"]) as? Bool) ?? (code != nil)
         let helloPair = expectedHello.flatMap(HandshakeVectorTests.pairFlag(in:)) ?? topLevelPair
         let ackPair = expectedAck.flatMap(HandshakeVectorTests.pairFlag(in:)) ?? false
 
@@ -148,18 +149,18 @@ final class HandshakeVectorTests: XCTestCase {
         // First ciphertexts. The plaintext is `0x01 || {"t":"auth"}` per §3/§5; accept the
         // bare JSON too, and a frame with or without its length prefix, so the comparison is
         // strict on crypto but tolerant of how the fixture was serialised.
-        if let hex = vector["firstInitFrame"] as? String {
+        if let hex = (vector["firstInitFrame"] ?? vector["authCiphertext"]) as? String {
             let recorded = try XCTUnwrap(Data(hexString: hex), "\(label) firstInitFrame hex")
-            let plaintext = (vector["firstInitPlaintext"] as? String).flatMap(Data.init(hexString:))
+            let plaintext = ((vector["firstInitPlaintext"] ?? vector["authPlaintext"]) as? String).flatMap(Data.init(hexString:))
             try checkFirstFrame(recorded, plaintext: plaintext,
                                 candidates: [Handshake.authFrame, Data("{\"t\":\"auth\"}".utf8)],
                                 sender: SecureChannel(keys: initiatorKeys, isInitiator: true),
                                 receiver: SecureChannel(keys: acceptorKeys, isInitiator: false),
                                 label: "\(label) firstInitFrame")
         }
-        if let hex = vector["firstAccFrame"] as? String {
+        if let hex = (vector["firstAccFrame"] ?? vector["authOkCiphertext"]) as? String {
             let recorded = try XCTUnwrap(Data(hexString: hex), "\(label) firstAccFrame hex")
-            let plaintext = (vector["firstAccPlaintext"] as? String).flatMap(Data.init(hexString:))
+            let plaintext = ((vector["firstAccPlaintext"] ?? vector["authOkPlaintext"]) as? String).flatMap(Data.init(hexString:))
             try checkFirstFrame(recorded, plaintext: plaintext,
                                 candidates: [Handshake.authOKFrame, Data("{\"t\":\"auth_ok\"}".utf8)],
                                 sender: SecureChannel(keys: acceptorKeys, isInitiator: false),
