@@ -81,8 +81,8 @@ Transports, auto-selected by the shim:
 | Host | Transport |
 |---|---|
 | WKWebView (macOS) | `window.webkit.messageHandlers.native.postMessage(request)` (WKScriptMessageHandlerWithReply → Promise); events via `window.__nativeEvent(json)` called from `evaluateJavaScript` |
-| WebView2 (Windows) | bound function `window.__nativeCall(requestJson)` → Promise<string>; events via `window.__nativeEvent(json)` from `Eval` |
-| Browser / phone | WebSocket at `ws(s)://<host>/ws`, same JSON frames; `?token=` query for auth |
+| WebView2 (Windows) | the window loads `http://127.0.0.1:<port>/?token=…` from the app's own loopback server and uses the WebSocket transport below — identical to the Linux test build, so what the Playwright tests exercise is what ships. (`window.__nativeCall` remains a supported optional transport for a future bound-function host.) |
+| Browser / phone / WebView2 | WebSocket at `ws(s)://<host>/ws`, same JSON frames; `?token=` query (or the `mu_token` cookie set by the first authenticated page load) for auth |
 
 Method names are namespaced per app (`app.*` common; `vitals.*`, `power.*`, `edgehop.*`,
 `reach.*`). Common methods every backend implements:

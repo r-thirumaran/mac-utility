@@ -24,18 +24,18 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 
 ## Phase 1 — design & research
 - [x] `docs/ARCHITECTURE.md` (stack, layout, shared bridge contract)
-- [ ] Platform API research notes in `docs/research/` (GPU counters, pmset/powercfg, CGEventTap, SendInput, media keys, WebView2)
+- [ ] Platform API research notes in `docs/research/` (workflow running; throttled to 2 agents at a time on this 4-core box) (GPU counters, pmset/powercfg, CGEventTap, SendInput, media keys, WebView2)
 - [x] `docs/edgehop-protocol.md` (wire protocol, pairing, crypto)
 - [x] `docs/reach-api.md` (agent HTTP/WebSocket API)
 
 ## Phase 2 — implementation
-- [ ] shared/go (tray, webview host, bridge, mdns, framing, crypto, http+ws)
-- [ ] shared/swift (menubar, WKWebView bridge, mini http+ws server, framing, crypto, admin runner)
-- [ ] shared/ui (native.js bridge shim, base CSS, charts)
+- [ ] shared/go (tray, webview host, bridge, mdns, framing, crypto, http+ws) — agent running
+- [ ] shared/swift (menubar, WKWebView bridge, mini http+ws server, framing, crypto, admin runner) — agent running
+- [ ] shared/ui (native.js bridge shim ✓, base CSS, charts) — agent running
 - [ ] Vitals mac / win / ui
 - [ ] Edgehop core + mac + win + ui
 - [ ] Reach agent mac / win + PWA + Capacitor mobile project
-- [ ] Icons for every app (`Tools/make_icns.py`, Windows .ico via go-winres)
+- [x] Icons for every app (`Tools/make_icons.py` → icns, ico, PWA PNGs)
 
 ## Phase 3 — verification
 - [ ] Go unit + integration tests green on Linux and Windows runners
