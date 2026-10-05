@@ -10,7 +10,7 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 
 | App | What | Mac DMG | Windows exe | Mobile |
 |---|---|---|---|---|
-| Clipwell | window snapping + clipboard history (copied from r-thirumaran/Clipwell) | source copied, CI pending | n/a (macOS-only app) | n/a |
+| Clipwell | window snapping + clipboard history (copied from r-thirumaran/Clipwell) | CI builds DMG (green) | n/a (macOS-only app) | n/a |
 | Vitals | CPU / RAM / GPU / process monitor + power & lid-close settings | not started | not started | n/a |
 | Edgehop | one mouse + keyboard across Macs and Windows PCs (screen-edge switching) | not started | not started | n/a |
 | Reach | control any laptop from your phone (agent + mobile app) | not started | not started | not started |
@@ -20,13 +20,13 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 - [x] Copy the six release DMGs into `releases/clipwell/` and verify SHA-256
 - [x] Top-level Makefile, `Tools/build_mac_app.sh`, `Tools/make_dmg.sh`, `Tools/make_icns.py`
 - [x] CI workflow building the Clipwell DMG on a macOS runner
-- [ ] First CI run green (proves the DMG pipeline before the new apps land)
+- [x] First CI run green: run 37361736347 built Clipwell-2.1.dmg on macos-15 in 51 s
 
 ## Phase 1 — design & research
-- [ ] `docs/ARCHITECTURE.md` (stack, layout, shared bridge contract)
+- [x] `docs/ARCHITECTURE.md` (stack, layout, shared bridge contract)
 - [ ] Platform API research notes in `docs/research/` (GPU counters, pmset/powercfg, CGEventTap, SendInput, media keys, WebView2)
-- [ ] `docs/edgehop-protocol.md` (wire protocol, pairing, crypto)
-- [ ] `docs/reach-api.md` (agent HTTP/WebSocket API)
+- [x] `docs/edgehop-protocol.md` (wire protocol, pairing, crypto)
+- [x] `docs/reach-api.md` (agent HTTP/WebSocket API)
 
 ## Phase 2 — implementation
 - [ ] shared/go (tray, webview host, bridge, mdns, framing, crypto, http+ws)
