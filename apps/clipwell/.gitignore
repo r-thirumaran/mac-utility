@@ -1,0 +1,16 @@
+# Build products
+build/
+DerivedData/
+*.dSYM/
+
+# Xcode user state (the .xcodeproj itself IS committed — see README)
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+# macOS
+.DS_Store
+
+# Generated icon intermediates (assets/ and Support/AppIcon.icns ARE committed)
+build/AppIcon.iconset/

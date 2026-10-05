@@ -1,0 +1,35 @@
+# Build products
+build/
+dist-out/
+DerivedData/
+*.dSYM/
+*.app/
+*.exe
+*.syso
+!releases/**
+
+# Xcode user state
+xcuserdata/
+*.xcuserstate
+
+# Node / Capacitor
+node_modules/
+apps/reach/mobile/android/.gradle/
+apps/reach/mobile/android/app/build/
+apps/reach/mobile/android/build/
+apps/reach/mobile/android/local.properties
+apps/reach/mobile/ios/App/Pods/
+apps/reach/mobile/www/
+
+# Go
+/bin/
+coverage.out
+
+# Playwright / test output
+test-results/
+playwright-report/
+*.png.tmp
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,60 @@
+name: build
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  MAC_APPS: clipwell
+
+jobs:
+  macos:
+    name: macOS DMG (${{ matrix.app }})
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [clipwell]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer || true
+          xcodebuild -version || true
+          swift --version
+      - name: Build DMG
+        run: make dmg-${{ matrix.app }}
+      - name: Checksums
+        run: cd dist-out && shasum -a 256 *.dmg | tee SHA256SUMS-${{ matrix.app }}-macos.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app }}-macos-dmg
+          path: |
+            dist-out/*.dmg
+            dist-out/SHA256SUMS-*.txt
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Upload to GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -R artifacts
+          gh release create "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" --generate-notes \
+            artifacts/**/*.dmg artifacts/**/*.exe artifacts/**/*.apk artifacts/**/SHA256SUMS-*.txt 2>/dev/null \
+          || gh release upload "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --clobber \
+            artifacts/**/*.dmg artifacts/**/*.exe artifacts/**/*.apk artifacts/**/SHA256SUMS-*.txt

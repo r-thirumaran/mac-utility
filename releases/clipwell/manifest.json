@@ -1,0 +1,62 @@
+[
+  {
+    "tag": "v2.1",
+    "name": "Clipwell-2.1.dmg",
+    "size": 1760617,
+    "sha256": "6ae52579d7ddb9b20496c074e8e3cbf21f788d83c3b99513bd7af48b325dd098",
+    "published": "2026-07-27T20:38:23Z",
+    "url": "https://github.com/r-thirumaran/Clipwell/releases/download/v2.1/Clipwell-2.1.dmg",
+    "verified": true,
+    "release_url": "https://github.com/r-thirumaran/Clipwell/releases/tag/v2.1"
+  },
+  {
+    "tag": "v2.0",
+    "name": "Clipwell-2.0.dmg",
+    "size": 953823,
+    "sha256": "a351d7b8b984531520092d3516b38dbcb4d9d1b0cf4696b628e60e45592d56ab",
+    "published": "2026-07-27T06:41:01Z",
+    "url": "https://github.com/r-thirumaran/Clipwell/releases/download/v2.0/Clipwell-2.0.dmg",
+    "verified": true,
+    "release_url": "https://github.com/r-thirumaran/Clipwell/releases/tag/v2.0"
+  },
+  {
+    "tag": "v1.2.1",
+    "name": "SnapBoard-1.2.1.dmg",
+    "size": 948567,
+    "sha256": "ef3daff7ce4e93abe9b5456d85ea65fa7b14754a2e0d8aaaad6e2d226035e8c4",
+    "published": "2026-07-27T06:23:52Z",
+    "url": "https://github.com/r-thirumaran/Clipwell/releases/download/v1.2.1/SnapBoard-1.2.1.dmg",
+    "verified": true,
+    "release_url": "https://github.com/r-thirumaran/Clipwell/releases/tag/v1.2.1"
+  },
+  {
+    "tag": "v1.2",
+    "name": "SnapBoard-1.2.dmg",
+    "size": 949380,
+    "sha256": "f42fdb06ecc8ad1fea58a4f51d88c2142640323acda81559e8b0ea61d84fefec",
+    "published": "2026-07-27T06:04:49Z",
+    "url": "https://github.com/r-thirumaran/Clipwell/releases/download/v1.2/SnapBoard-1.2.dmg",
+    "verified": true,
+    "release_url": "https://github.com/r-thirumaran/Clipwell/releases/tag/v1.2"
+  },
+  {
+    "tag": "v1.1",
+    "name": "SnapBoard-1.1.dmg",
+    "size": 946255,
+    "sha256": "24dc9fe6e8220243e7a9358b067db3a1291e2c7b18ad6d7cf6c5fa9b295d7a38",
+    "published": "2026-07-26T10:06:17Z",
+    "url": "https://github.com/r-thirumaran/Clipwell/releases/download/v1.1/SnapBoard-1.1.dmg",
+    "verified": true,
+    "release_url": "https://github.com/r-thirumaran/Clipwell/releases/tag/v1.1"
+  },
+  {
+    "tag": "v1.0",
+    "name": "SnapBoard-1.0.dmg",
+    "size": 870962,
+    "sha256": "b0452df11b09ff7adf6a0c82c4b047028156b8a5a752182bcbe758eb065523df",
+    "published": "2026-07-26T07:33:59Z",
+    "url": "https://github.com/r-thirumaran/Clipwell/releases/download/v1.0/SnapBoard-1.0.dmg",
+    "verified": true,
+    "release_url": "https://github.com/r-thirumaran/Clipwell/releases/tag/v1.0"
+  }
+]
