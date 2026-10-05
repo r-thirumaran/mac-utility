@@ -50,8 +50,10 @@ final class SecureChannel {
         let nonce = try ChaChaPoly.Nonce(data: SecureChannel.nonce(for: sendCounter))
         let box = try ChaChaPoly.seal(plaintext, using: sendKey, nonce: nonce)
         advanceSendCounter()
-        var out = box.ciphertext
-        out.append(box.tag)
+        // swift-crypto hands back slices of the combined box (non-zero startIndex on Linux);
+        // return a fresh Data so callers can index from 0 and frame it directly.
+        var out = Data(box.ciphertext)
+        out.append(contentsOf: box.tag)
         return out
     }
 

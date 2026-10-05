@@ -65,7 +65,7 @@ final class SecureChannelTests: XCTestCase {
     func testTamperedCiphertextFails() throws {
         let (initiator, acceptor) = pair()
         var sealed = try initiator.seal(Data("hello".utf8))
-        sealed[0] ^= 0x01
+        sealed[sealed.startIndex] ^= 0x01
         XCTAssertThrowsError(try acceptor.open(sealed)) { error in
             XCTAssertEqual(error as? SecureChannelError, .decryptionFailed)
         }
