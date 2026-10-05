@@ -84,19 +84,21 @@ def icon_edgehop():
         cx = x0 + mw / 2
         d.rectangle([cx - K * 22, top + mono_h, cx + K * 22, top + mono_h + W * 0.06], fill=white)
         d.rounded_rectangle([cx - W * 0.09, top + mono_h + W * 0.055, cx + W * 0.09, top + mono_h + W * 0.09], radius=K * 14, fill=white)
-    # arrow arc from left screen centre to right screen centre
-    lx, rx = W * 0.16 + mw / 2 + W * 0.05, W * 0.16 + mw + gap + mw / 2 - W * 0.05
-    cy = top + mono_h * 0.55
+    # a hop: an arc rising from the left screen, over the gap, landing on the right screen
+    lx = W * 0.16 + mw * 0.62
+    rx = W * 0.16 + mw + gap + mw * 0.38
+    y0 = top - K * 30
     pts = []
     for t in range(0, 101):
         u = t / 100
-        x = lx + (rx - lx) * u
-        y = cy - math.sin(u * math.pi) * W * 0.17
-        pts.append((x, y))
-    stroke_polyline(d, pts, K * 30, white)
-    # arrow head
+        pts.append((lx + (rx - lx) * u, y0 - math.sin(u * math.pi) * W * 0.13))
+    stroke_polyline(d, pts[:-8], K * 30, white)
+    # arrow head pointing down-right at the landing point
     ax, ay = pts[-1]
-    d.polygon([(ax + K * 8, ay + K * 8), (ax - W * 0.06, ay - W * 0.02), (ax - W * 0.015, ay - W * 0.075)], fill=white)
+    hl = W * 0.075
+    d.polygon([(ax, ay + K * 20), (ax - hl * 0.95, ay - hl * 0.55), (ax + hl * 0.25, ay - hl * 0.95)], fill=white)
+    # a small dot where the cursor leaves the left screen
+    d.ellipse([lx - K * 34, y0 - K * 34, lx + K * 34, y0 + K * 34], fill=white)
     out = Image.new("RGBA", (W, W), (0, 0, 0, 0))
     out.paste(grad, (0, 0), mask)
     out.alpha_composite(layer)

@@ -1,0 +1,14 @@
+{
+  "name": "mac-utility",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Test harness for the shared web UIs (Playwright against the Linux builds of the Go backends).",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/ui/run.mjs",
+    "test:headed": "HEADED=1 node tests/ui/run.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
+  }
+}
