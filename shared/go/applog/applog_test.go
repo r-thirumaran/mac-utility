@@ -1,6 +1,7 @@
 package applog
 
 import (
+	"runtime"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,7 +44,7 @@ func TestRotation(t *testing.T) {
 		t.Fatalf("expected exactly log + one backup, got %v", entries)
 	}
 	st, _ := os.Stat(path)
-	if st.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && st.Mode().Perm() != 0o600 { // Windows has no POSIX modes
 		t.Fatalf("mode %o", st.Mode().Perm())
 	}
 

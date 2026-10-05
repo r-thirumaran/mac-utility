@@ -41,7 +41,11 @@ func TestDirsPerPlatform(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if d.config != tc.config || d.state != tc.state || d.log != tc.log {
+			// dirs() joins with the host's separator even when simulating another GOOS, so
+			// compare slash-normalised paths to keep the test meaningful on Windows runners.
+			if filepath.ToSlash(d.config) != filepath.ToSlash(tc.config) ||
+				filepath.ToSlash(d.state) != filepath.ToSlash(tc.state) ||
+				filepath.ToSlash(d.log) != filepath.ToSlash(tc.log) {
 				t.Fatalf("got %+v", d)
 			}
 		})
