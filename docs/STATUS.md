@@ -13,7 +13,7 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 | Clipwell | window snapping + clipboard history (copied from r-thirumaran/Clipwell) | CI builds DMG (green) | n/a (macOS-only app) | n/a |
 | Vitals | CPU / RAM / GPU / process monitor + power & lid-close settings | DMG built by CI (f6ad584) | exe built by CI, Go tests green on Linux + Windows | n/a |
 | Edgehop | one mouse + keyboard across Macs and Windows PCs (screen-edge switching) | mac app in progress (batch 2) | Go core + Windows backend + UI committed, tests green | n/a |
-| Reach | control any laptop from your phone (agent + mobile app) | DMG built by CI (cd17a03) | Go agent committed, tests green on Linux + Windows, exe built | PWA committed (Playwright-tested); Capacitor 8 Android + iOS projects committed, APK CI job added (e026c6d) |
+| Reach | control any laptop from your phone (agent + mobile app) | DMG built by CI (cd17a03) | Go agent committed, tests green on Linux + Windows, exe built | PWA committed (Playwright-tested); Capacitor 8 Android + iOS projects; APK built by CI (989dbc4) |
 
 ## Phase 0 — scaffold
 - [x] Copy Clipwell source into `apps/clipwell/` (from r-thirumaran/Clipwell@dbdd2cd)
@@ -42,7 +42,7 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 - [x] Web UI Playwright tests green on CI (kit, Vitals, Edgehop two-instance pairing + hop, Reach phone flow) — run on fe3600d after fixing a real pairing-dialog race
 - [ ] macOS DMGs for all four apps built by CI
 - [x] Windows exes for Vitals, Edgehop, Reach built by CI (artifact windows-exe)
-- [ ] Android APK for Reach built by CI
+- [x] Android APK for Reach built by CI (job 'Reach Android APK (Capacitor)' green on 989dbc4; artifact reach-android-apk)
 - [ ] Adversarial code review pass per component, findings fixed
 - [ ] README per app with install + permission walkthrough
 
