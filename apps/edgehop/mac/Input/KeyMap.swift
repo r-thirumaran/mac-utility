@@ -37,7 +37,7 @@ final class KeyMap {
 
     private static let wiresByMediaKeyType: [Int: Int] = {
         var out: [Int: Int] = [:]
-        for (wire, type) in mediaKeyTypes {
+        for (wire, type) in KeyMap.mediaKeyTypes {
             out[type] = wire
         }
         return out

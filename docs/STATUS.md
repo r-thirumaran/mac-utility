@@ -33,7 +33,7 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 - [x] shared/swift (menubar, WKWebView bridge, mini http+ws server, framing, crypto, admin runner) — type-checks on macos-15; XCTest suites run on macOS + Linux in CI
 - [x] shared/ui (native.js bridge shim, base CSS, charts, components, demo) — Playwright test green
 - [x] Vitals mac / win / ui — win backend + ui (6447c63); mac backend compiles and the Vitals DMG job is green (f6ad584)
-- [ ] Edgehop core + mac + win + ui — core/win/ui DONE (Go unit + integration tests, two-instance Playwright test green); mac agent running
+- [ ] Edgehop core + mac + win + ui — core/win/ui DONE; mac app written and added to the macOS CI matrix — fix compile errors until the Edgehop DMG job is green
 - [ ] Reach agent mac / win + PWA + Capacitor mobile project — win agent + PWA DONE (commit 956f3ee); mac agent running (batch 2); Capacitor pending
 - [x] Icons for every app (`Tools/make_icons.py` → icns, ico, PWA PNGs)
 

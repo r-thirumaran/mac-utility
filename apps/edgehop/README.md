@@ -135,22 +135,71 @@ hooks with an in-memory device that the UI tests drive.
 
 ## macOS
 
-The macOS app (`apps/edgehop/mac`, Swift) lives in the menu bar and needs two
-permissions, which it asks for on first launch and shows as badges in the
-status strip until they are granted:
+The macOS app (`apps/edgehop/mac`, Swift, built by `Tools/build_mac_app.sh`)
+lives in the menu bar. The menu has **Open Edgehop**, **Switch to ▸** (every
+paired machine plus *This Mac*), **Launch at Login** and **Quit**; while the
+pointer is on another machine the menu bar shows `⌨ <that machine>`.
 
-| Permission | Why |
-|---|---|
-| **Accessibility** (System Settings ▸ Privacy & Security) | to move the pointer and type on this Mac when another machine sends input |
-| **Input Monitoring** | to see the mouse and keyboard on this Mac so it can hand them to another machine |
-
-Config lives in `~/Library/Application Support/Edgehop/`; logs go to the
-unified log (subsystem `com.thiru.edgehop`). The build is ad-hoc signed: see
+Config (pairing keys, layout, settings): `~/Library/Application Support/Edgehop/`
+(`config.json` and `identity.json`, both 0600, the same shape the Windows app
+writes). Logs go to the unified log (subsystem `com.thiru.edgehop`; the window's
+Log panel shows the same lines). The build is ad-hoc signed: see
 `dist/READ-ME-FIRST.txt` for the first-launch steps.
 
-While a password field has **secure input** on (a macOS feature), keystrokes
-sent from another machine are blocked and the sender shows a badge; type the
-password on the Mac's own keyboard.
+### Permissions
+
+Edgehop needs two permissions. It asks for both on the first launch (macOS
+shows each system prompt only once per app version) and shows a red badge in
+the window's status strip with an **Open Settings** button for each one still
+missing. Until they are granted the Mac can see its own mouse but cannot hand
+the keyboard over or receive input.
+
+| Permission | System Settings ▸ Privacy & Security ▸ … | Why |
+|---|---|---|
+| **Accessibility** | Accessibility | to inject the other machine's input here (pointer, clicks, keys) and to swallow local input while the pointer is on another machine |
+| **Input Monitoring** | Input Monitoring | to see this Mac's keyboard so it can follow the pointer to another machine (and for the Ctrl+Alt hotkeys) |
+
+Walkthrough:
+
+1. Start Edgehop. Two system dialogs appear ("Edgehop would like to control
+   this computer using accessibility features", "… would like to receive
+   keystrokes from any application"). Click **Open System Settings** on each.
+2. In **Accessibility**, turn on the switch next to Edgehop. If the app is not
+   listed, click **+** and pick it from where you installed it.
+3. In **Input Monitoring**, do the same. macOS may say the app must be quit
+   and reopened: do that.
+4. Back in Edgehop the badges disappear within a couple of seconds; the Log
+   panel reports "full tap installed (mouse + keyboard)". If a badge stays,
+   quit Edgehop from the menu bar and start it again — macOS does not always
+   apply a fresh Input Monitoring grant to the running process.
+
+**After rebuilding or updating:** the build is ad-hoc signed, so every new
+binary has a different signature and macOS treats it as a different app.
+Both permissions have to be granted again: remove the old Edgehop entry in
+each pane (select it, press **−**), add the new one, and restart the app. The
+same happens if the app is moved to another folder.
+
+### Caveats
+
+* **Secure input.** When a password field (or Terminal with *Secure Keyboard
+  Entry*, or a login prompt) has the keyboard, macOS blocks synthetic
+  keystrokes. Edgehop notices, stops injecting keys, and tells the machine
+  that is sending input, which shows "*name*: secure input, keys blocked" in
+  its status strip. Type the password on the Mac's own keyboard; everything
+  resumes when the field loses focus. The pointer is not affected.
+* **Cursor visibility while the pointer is elsewhere.** While another machine
+  has control, the Mac parks its own cursor at the centre of the primary
+  display and stops it from moving; hiding it uses `CGDisplayHideCursor`,
+  which macOS only honours for the frontmost application. Without private
+  APIs the parked arrow may therefore stay visible on some systems. It is
+  harmless — it does not move and comes back to life the moment control
+  returns.
+* **Hot Corners.** Switching is suppressed within the corner dead zone
+  (32 px by default, Settings ▸ Corner dead zone), so Hot Corners and the
+  window buttons stay reachable.
+* **Granting a permission does not relaunch anything.** The event tap upgrades
+  itself when a permission appears, but if macOS has already denied the tap
+  once (typically Input Monitoring) a restart of Edgehop is needed.
 
 ## Developing
 
