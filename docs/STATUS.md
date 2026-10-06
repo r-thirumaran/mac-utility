@@ -24,7 +24,7 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 
 ## Phase 1 — design & research
 - [x] `docs/ARCHITECTURE.md` (stack, layout, shared bridge contract)
-- [ ] Platform API research notes in `docs/research/` (workflow running; throttled to 2 agents at a time on this 4-core box) (GPU counters, pmset/powercfg, CGEventTap, SendInput, media keys, WebView2)
+- [x] Platform API research notes in `docs/research/` (5 of the planned notes landed: macOS/Windows stats + power, macOS remote actions; the remaining topics — macOS/Windows input capture, Windows remote actions, Capacitor — are verified by the implementing agents themselves) (GPU counters, pmset/powercfg, CGEventTap, SendInput, media keys, WebView2)
 - [x] `docs/edgehop-protocol.md` (wire protocol, pairing, crypto)
 - [x] `docs/reach-api.md` (agent HTTP/WebSocket API)
 
@@ -32,9 +32,9 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 - [x] shared/go (tray, webview host, bridge, mdns, framing, crypto, http+ws) — tests green on Linux, builds for windows/amd64
 - [x] shared/swift (menubar, WKWebView bridge, mini http+ws server, framing, crypto, admin runner) — type-checks on macos-15; XCTest suites run on macOS + Linux in CI
 - [x] shared/ui (native.js bridge shim, base CSS, charts, components, demo) — Playwright test green
-- [ ] Vitals mac / win / ui — agents running (mac backend; win backend + ui)
-- [ ] Edgehop core + mac + win + ui — agents running (core + win + ui; mac)
-- [ ] Reach agent mac / win + PWA + Capacitor mobile project — agents running (win agent + PWA; mac agent); Capacitor not started
+- [ ] Vitals mac / win / ui — batch 1 agent finishing win backend + ui (partial code committed); mac backend partial (3 samplers), batch 2
+- [ ] Edgehop core + mac + win + ui — batch 1 agent finishing core/win/ui (core + transport + tests committed); mac in batch 2
+- [ ] Reach agent mac / win + PWA + Capacitor mobile project — batch 1 agent building win agent + PWA; mac in batch 2; Capacitor after the PWA exists
 - [x] Icons for every app (`Tools/make_icons.py` → icns, ico, PWA PNGs)
 
 ## Phase 3 — verification
@@ -45,6 +45,12 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 - [ ] Android APK for Reach built by CI
 - [ ] Adversarial code review pass per component, findings fixed
 - [ ] README per app with install + permission walkthrough
+
+## Orchestration plan (resume here after a usage-limit pause)
+1. Batch 1 (running): three Linux-testable agents — Vitals win+ui, Edgehop core/win/ui, Reach win+PWA. Commit each as it lands; CI (go-linux, go-windows) must be green.
+2. Batch 2: Vitals mac (continue from apps/vitals/mac/Stats), Edgehop mac, Reach mac — Swift, verified only by the macOS CI jobs; add each app to the macOS DMG matrix in .github/workflows/build.yml when its sources exist.
+3. Batch 3: Reach Capacitor wrapper (apps/reach/mobile) + Android APK CI job; conformance pass (mac vs win method surfaces); adversarial code review; READMEs; tag v0.1.0 to publish the release with all DMGs/exes/APK.
+Run at most three implementation agents at once: six in parallel exhausted the usage window before any of them finished.
 
 ## Blockers / notes
 - This build box is Linux: Swift cannot be compiled here (download.swift.org is blocked), so macOS code is verified only by the GitHub Actions macOS runner. Keep pushes small and watch the runs.
