@@ -38,10 +38,10 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 - [x] Icons for every app (`Tools/make_icons.py` → icns, ico, PWA PNGs)
 
 ## Phase 3 — verification
-- [ ] Go unit + integration tests green on Linux and Windows runners
-- [ ] Web UI Playwright tests green
+- [x] Go unit + integration tests green on Linux and Windows runners (run 37408123728: Vitals, Edgehop, Reach all pass natively on windows-latest; three exes built)
+- [ ] Web UI Playwright tests green — Vitals and Reach pass on CI; the Edgehop two-instance pairing test timed out on the Linux runner once (agent hardening it)
 - [ ] macOS DMGs for all four apps built by CI
-- [ ] Windows exes for Vitals, Edgehop, Reach built by CI
+- [x] Windows exes for Vitals, Edgehop, Reach built by CI (artifact windows-exe)
 - [ ] Android APK for Reach built by CI
 - [ ] Adversarial code review pass per component, findings fixed
 - [ ] README per app with install + permission walkthrough
