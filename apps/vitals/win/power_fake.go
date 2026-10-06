@@ -97,6 +97,12 @@ func (p *fakePower) KeepAwake(enabled bool, mode string) (KeepAwakeState, error)
 	return p.model.KeepAwake, nil
 }
 
+func (p *fakePower) AwakeState() KeepAwakeState {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.model.KeepAwake
+}
+
 func (p *fakePower) ScheduleGet() ([]ScheduleItem, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

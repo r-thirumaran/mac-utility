@@ -68,6 +68,12 @@ func (p *linuxPower) KeepAwake(enabled bool, mode string) (KeepAwakeState, error
 	return p.keep, nil
 }
 
+func (p *linuxPower) AwakeState() KeepAwakeState {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.keep
+}
+
 func (p *linuxPower) ScheduleGet() ([]ScheduleItem, error) { return []ScheduleItem{}, nil }
 
 func (p *linuxPower) ScheduleSet(items []ScheduleItem) ([]ScheduleItem, error) {

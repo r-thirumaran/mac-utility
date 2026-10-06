@@ -231,11 +231,16 @@ func (s *linuxStats) scanProcesses() ([]Process, error) {
 	return out, nil
 }
 
-func (s *linuxStats) Kill(pid int) error {
+// Kill sends SIGTERM, or SIGKILL when force is set.
+func (s *linuxStats) Kill(pid int, force bool) error {
 	if pid <= 1 || pid == os.Getpid() {
 		return fmt.Errorf("refusing to kill pid %d", pid)
 	}
-	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
+	sig := syscall.SIGTERM
+	if force {
+		sig = syscall.SIGKILL
+	}
+	if err := syscall.Kill(pid, sig); err != nil {
 		return fmt.Errorf("kill %d: %w", pid, err)
 	}
 	return nil

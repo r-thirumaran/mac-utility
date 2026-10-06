@@ -54,8 +54,8 @@ const (
 
 // SYSTEM_POWER_CAPABILITIES (76 bytes, Windows 10 layout).
 type systemPowerCapabilities struct {
-	PowerButtonPresent, SleepButtonPresent, LidPresent, SystemS1, SystemS2, SystemS3, SystemS4, SystemS5 bool
-	HiberFilePresent, FullWake, VideoDimPresent, ApmPresent, UpsPresent, ThermalControl, ProcessorThrottle  bool
+	PowerButtonPresent, SleepButtonPresent, LidPresent, SystemS1, SystemS2, SystemS3, SystemS4, SystemS5   bool
+	HiberFilePresent, FullWake, VideoDimPresent, ApmPresent, UpsPresent, ThermalControl, ProcessorThrottle bool
 	ProcessorMinThrottle, ProcessorMaxThrottle                                                             uint8
 	FastSystemS4, Hiberboot, WakeAlarmPresent, AoAc, DiskSpinDown                                          bool
 	HiberFileType                                                                                          uint8
@@ -326,6 +326,8 @@ func (p *windowsPower) KeepAwake(enabled bool, mode string) (KeepAwakeState, err
 	p.awake.Set(enabled, mode)
 	return p.awake.State(), nil
 }
+
+func (p *windowsPower) AwakeState() KeepAwakeState { return p.awake.State() }
 
 // awakeKeeper owns the OS thread whose execution state keeps the machine
 // awake; the state dies with the thread, so the goroutine stays locked and

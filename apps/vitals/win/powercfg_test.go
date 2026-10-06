@@ -82,12 +82,12 @@ func TestActionIndexes(t *testing.T) {
 
 func TestPlanPowercfg(t *testing.T) {
 	changes := flattenChanges(map[string]any{
-		"onBattery":    map[string]any{"lidClose": "sleep", "displaySleepMin": float64(5)},
-		"onPower":      map[string]any{"systemSleepMin": float64(0), "lidClose": "hibernate"},
-		"lidOpenWakes": false,
-		"powerButton":  "displayOff",
-		"hibernate":    map[string]any{"enabled": true, "mode": "reduced"},
-		"powerNap":     true,
+		"onBattery":     map[string]any{"lidClose": "sleep", "displaySleepMin": float64(5)},
+		"onPower":       map[string]any{"systemSleepMin": float64(0), "lidClose": "hibernate"},
+		"lidOpenWakes":  false,
+		"powerButton":   "displayOff",
+		"hibernate":     map[string]any{"enabled": true, "mode": "reduced"},
+		"powerNap":      true,
 		"wakeOnNetwork": true,
 	})
 	ops, failed := planPowercfg(changes, false)

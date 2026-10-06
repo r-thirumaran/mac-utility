@@ -8,12 +8,12 @@ import "time"
 // whichever fields are non-zero (macOS reports app/wired/compressed, Windows
 // and Linux report used/cached).
 type Sample struct {
-	T       int64        `json:"t"`
-	CPU     CPUSample    `json:"cpu"`
-	Mem     MemSample    `json:"mem"`
-	GPU     []GPUSample  `json:"gpu"`
-	Net     NetSample    `json:"net"`
-	Disk    DiskSample   `json:"disk"`
+	T       int64          `json:"t"`
+	CPU     CPUSample      `json:"cpu"`
+	Mem     MemSample      `json:"mem"`
+	GPU     []GPUSample    `json:"gpu"`
+	Net     NetSample      `json:"net"`
+	Disk    DiskSample     `json:"disk"`
 	Battery *BatterySample `json:"battery"`
 }
 
@@ -99,11 +99,13 @@ type HostInfo struct {
 
 // Stats is the platform backend behind the sampler and the process list.
 // Sample and Processes compute rates from the previous call, so the first
-// call after construction reports zero rates.
+// call after construction reports zero rates. Kill ends a process; force asks
+// for an immediate termination where the platform distinguishes the two
+// (SIGKILL on Linux; Windows only has TerminateProcess).
 type Stats interface {
 	Sample() (Sample, error)
 	Processes() ([]Process, error)
-	Kill(pid int) error
+	Kill(pid int, force bool) error
 	Info() HostInfo
 	Close()
 }

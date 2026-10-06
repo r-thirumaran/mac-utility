@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Vitals</title>
+  <link rel="icon" href="./icon-192.png">
+  <link rel="stylesheet" href="./shared/base.css">
+  <link rel="stylesheet" href="./app.css">
+</head>
+<body>
+  <header class="toolbar vt-toolbar">
+    <div class="toolbar-title vt-brand"><span class="vt-logo" aria-hidden="true"></span>Vitals</div>
+    <nav class="tabs is-pills vt-nav" id="nav" aria-label="Pages">
+      <button class="tab" data-tab="overview" data-panel="panel-overview" aria-selected="true">Overview</button>
+      <button class="tab" data-tab="processes" data-panel="panel-processes">Processes</button>
+      <button class="tab" data-tab="power" data-panel="panel-power">Power</button>
+    </nav>
+    <span class="badge badge-dot ml-auto" id="conn" aria-live="polite">Connecting…</span>
+    <div class="segmented hide-phone" id="theme-switch" aria-label="Theme">
+      <button data-value="auto" aria-pressed="true">Auto</button>
+      <button data-value="light">Light</button>
+      <button data-value="dark">Dark</button>
+    </div>
+  </header>
+
+  <main class="page stack gap-4" id="app">
+    <section class="tab-panel stack gap-4" id="panel-overview" aria-label="Overview"></section>
+    <section class="tab-panel stack gap-4" id="panel-processes" aria-label="Processes" hidden></section>
+    <section class="tab-panel stack gap-4" id="panel-power" aria-label="Power" hidden></section>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

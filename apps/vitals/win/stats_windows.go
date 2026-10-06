@@ -64,22 +64,22 @@ type processorPerf struct {
 
 // MEMORYSTATUSEX, 64 bytes.
 type memoryStatusEx struct {
-	Length, MemoryLoad                                                                        uint32
+	Length, MemoryLoad                                                                                   uint32
 	TotalPhys, AvailPhys, TotalPageFile, AvailPageFile, TotalVirtual, AvailVirtual, AvailExtendedVirtual uint64
 }
 
 // PERFORMANCE_INFORMATION, 104 bytes on amd64/arm64; SIZE_T fields are pages.
 type performanceInformation struct {
-	Cb                                                                                                 uint32
+	Cb                                                                                               uint32
 	CommitTotal, CommitLimit, CommitPeak, PhysicalTotal, PhysicalAvailable, SystemCache, KernelTotal uintptr
-	KernelPaged, KernelNonpaged, PageSize                                                              uintptr
-	HandleCount, ProcessCount, ThreadCount                                                            uint32
+	KernelPaged, KernelNonpaged, PageSize                                                            uintptr
+	HandleCount, ProcessCount, ThreadCount                                                           uint32
 }
 
 // SYSTEM_POWER_STATUS, 12 bytes.
 type systemPowerStatus struct {
 	ACLineStatus, BatteryFlag, BatteryLifePercent, SystemStatusFlag uint8
-	BatteryLifeTime, BatteryFullLifeTime                             uint32
+	BatteryLifeTime, BatteryFullLifeTime                            uint32
 }
 
 // MIB_IF_TABLE2: NumEntries then rows at +8.
@@ -456,7 +456,9 @@ func (s *windowsStats) scanProcesses() ([]Process, error) {
 	return out, nil
 }
 
-func (s *windowsStats) Kill(pid int) error {
+// Kill terminates the process. Windows has no graceful variant without a
+// window handle, so force is accepted for interface symmetry and ignored.
+func (s *windowsStats) Kill(pid int, force bool) error {
 	if pid <= 4 || pid == os.Getpid() {
 		return fmt.Errorf("refusing to end pid %d", pid)
 	}

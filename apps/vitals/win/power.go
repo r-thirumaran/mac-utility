@@ -99,6 +99,9 @@ type Power interface {
 	Apply(changes map[string]any) (ApplyResult, error)
 	Action(action string) error
 	KeepAwake(enabled bool, mode string) (KeepAwakeState, error)
+	// AwakeState reports the keep-awake state without re-reading the
+	// settings (power.keepAwake.get).
+	AwakeState() KeepAwakeState
 	ScheduleGet() ([]ScheduleItem, error)
 	ScheduleSet(items []ScheduleItem) ([]ScheduleItem, error)
 }
