@@ -3,6 +3,7 @@
 package main
 
 import (
+	"runtime"
 	"time"
 	"unicode/utf16"
 	"unsafe"
@@ -14,7 +15,9 @@ import (
 
 // winClipboard is the system text clipboard (CF_UNICODETEXT) through user32
 // and kernel32: OpenClipboard is retried briefly because another process may
-// hold it for a moment.
+// hold it for a moment. The clipboard is owned by the thread that opened it,
+// so each operation pins its goroutine to one OS thread until CloseClipboard
+// (otherwise a rescheduled goroutine would leave it open for every process).
 type winClipboard struct{}
 
 var (
@@ -56,6 +59,8 @@ func openClipboard() bool {
 
 // Text returns the clipboard text, ok=false when it holds no text.
 func (winClipboard) Text() (string, bool) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	if !openClipboard() {
 		return "", false
 	}
@@ -98,6 +103,8 @@ func (winClipboard) SetText(s string) {
 	}
 	copy(unsafe.Slice((*uint16)(ptr(p)), len(u)), u)
 	procGlobalUnlock.Call(h)
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	if !openClipboard() {
 		procGlobalFree.Call(h)
 		return
