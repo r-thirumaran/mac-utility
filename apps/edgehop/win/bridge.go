@@ -348,12 +348,19 @@ func (a *app) pairStart(_ context.Context, raw json.RawMessage) (any, error) {
 	if p.PeerID != "" && p.PeerID == a.node.ID() {
 		return nil, bridge.Errorf(bridge.CodeInvalidParams, "cannot pair with this machine")
 	}
-	if err := a.tr.PairStart(p.PeerID, p.Address); err != nil {
-		return nil, bridge.Errorf(bridge.CodeInternal, "%v", err)
-	}
+	// Record the placeholder stage before the transport runs: its own
+	// connecting/waiting_code events may arrive within a millisecond and
+	// must not be overwritten by a later "connecting".
 	a.mu.Lock()
+	prev := a.pairing
 	a.pairing = &core.PairingState{Stage: "connecting", PeerID: p.PeerID, Address: p.Address}
 	a.mu.Unlock()
+	if err := a.tr.PairStart(p.PeerID, p.Address); err != nil {
+		a.mu.Lock()
+		a.pairing = prev
+		a.mu.Unlock()
+		return nil, bridge.Errorf(bridge.CodeInternal, "%v", err)
+	}
 	a.emitState()
 	return nil, nil
 }

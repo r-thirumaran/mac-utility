@@ -89,14 +89,16 @@ export class PairDialog {
     const confirm = async () => {
       const code = input.value.replace(/\D/g, '');
       if (code.length !== 6) { input.focus(); input.select(); return; }
-      btn.disabled = true;
+      // Render the "checking" step before the call and never after it: the
+      // backend's paired/failed events can arrive before the RPC response
+      // (the handshake is a millisecond on a LAN), and a late re-render must
+      // not clobber the stage those events already put on screen.
+      this.renderChecking();
       try {
         await native.call('edgehop.pair.confirm', { peerId: this.peerId, code });
-        this.renderConnecting('');
-        this.body.replaceChildren(h('p.dialog-text.row.gap-2', {}, h('span.eh-spinner'), h('span', {}, 'Checking the code…')));
       } catch (e) {
-        btn.disabled = false;
         toast(e.message || 'Could not send the code', { kind: 'danger' });
+        if (this.stage === 'checking') this.renderCode();
       }
     };
     const btn = h('button.btn.btn-primary', { type: 'button', id: 'pair-confirm', onclick: confirm }, 'Confirm');
@@ -108,6 +110,12 @@ export class PairDialog {
     this.actions.replaceChildren(
       h('button.btn.btn-secondary', { type: 'button', onclick: () => this.cancel() }, 'Cancel'), btn);
     setTimeout(() => input.focus(), 0);
+  }
+
+  renderChecking() {
+    this.setStage('checking');
+    this.body.replaceChildren(h('p.dialog-text.row.gap-2', {}, h('span.eh-spinner'), h('span', {}, 'Checking the code…')));
+    this.actions.replaceChildren(h('button.btn.btn-secondary', { type: 'button', onclick: () => this.cancel() }, 'Cancel'));
   }
 
   renderPaired(name) {
@@ -143,6 +151,7 @@ export class PairDialog {
     if (p.peerId) this.peerId = p.peerId;
     if (p.name) this.peerName = p.name;
     if (p.stage === this.stage) return; // already showing this step
+    if (p.stage === 'waiting_code' && this.stage === 'checking') return; // the code is being verified
     switch (p.stage) {
       case 'connecting': if (this.stage !== 'connecting') this.renderConnecting(p.address); break;
       case 'waiting_code': if (this.stage !== 'waiting_code') this.renderCode(); break;
@@ -154,7 +163,7 @@ export class PairDialog {
   }
 
   async cancel() {
-    if (this.stage === 'connecting' || this.stage === 'waiting_code') {
+    if (this.stage === 'connecting' || this.stage === 'waiting_code' || this.stage === 'checking') {
       try { await native.call('edgehop.pair.cancel'); } catch { /* nothing to cancel */ }
     }
     this.close();

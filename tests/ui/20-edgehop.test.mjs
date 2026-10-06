@@ -17,6 +17,7 @@ const rpc = (page, method, params = {}) => page.evaluate(async ([m, p]) => {
 }, [method, params]);
 
 const state = (page) => page.evaluate(() => window.__edgehop.state);
+const PAIR_TIMEOUT = 60000; // pairing and handshake stages: slow CI runners
 const waitState = (page, pred, msg, timeout = 20000) =>
   page.waitForFunction(pred, null, { timeout }).catch(async (e) => {
     await page.screenshot({ path: resolve(here, '..', '..', 'test-results', 'edgehop-failure.png') }).catch(() => {});
@@ -77,20 +78,24 @@ export default async function (t) {
   await L.waitForSelector('#pair-dialog[open][data-stage="address"]');
   await L.fill('#pair-address', `127.0.0.1:${sR.port}`);
   await L.click('#pair-go');
-  await R.waitForSelector('#code-dialog[open]', { timeout: 20000 });
+  await R.waitForSelector('#code-dialog[open]', { timeout: PAIR_TIMEOUT });
   const code = await R.$eval('#pair-code-display', (el) => el.textContent.replace(/\D/g, ''));
   await t.expect(code.length, 6, `pairing code shown on Right (${code})`);
   await t.expect(await R.textContent('#code-status'), /Left.*wants to pair/);
-  await L.waitForSelector('#pair-dialog[data-stage="waiting_code"]', { timeout: 20000 });
-  await R.waitForTimeout(300); // let the dialog's fade-in finish before the screenshot
+  // The backend reports the stage explicitly; the dialog follows it.
+  await waitState(L, () => window.__edgehop.state.pairing && window.__edgehop.state.pairing.stage === 'waiting_code', 'Left is waiting for the code', PAIR_TIMEOUT);
+  await L.waitForSelector('#pair-dialog[data-stage="waiting_code"]', { timeout: PAIR_TIMEOUT });
+  await R.locator('#code-dialog').evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished))); // fade-in done
   await t.screenshot(R, 'edgehop-pairing');
 
   // a wrong code is rejected and the dialog offers a retry
   const wrong = code === '000000' ? '111111' : '000000';
   await L.fill('#pair-code', wrong);
   await L.click('#pair-confirm');
-  await L.waitForSelector('#pair-dialog[data-stage="failed"]', { timeout: 20000 });
+  await waitState(L, () => window.__edgehop.state.pairing && window.__edgehop.state.pairing.stage === 'failed', 'backend reports the wrong code', PAIR_TIMEOUT);
+  await L.waitForSelector('#pair-dialog[data-stage="failed"]', { timeout: PAIR_TIMEOUT });
   await t.expect(await L.textContent('#pair-dialog .dialog-text'), /not accepted/);
+  await waitState(R, () => !window.__edgehop.state.peers.some((p) => p.paired), 'Right did not trust the wrong code', PAIR_TIMEOUT);
   await L.click('#pair-retry');
   await L.waitForSelector('#pair-dialog[data-stage="address"]');
   await t.expect(await L.inputValue('#pair-address'), `127.0.0.1:${sR.port}`, 'address remembered for the retry');
@@ -98,17 +103,19 @@ export default async function (t) {
   await R.waitForFunction((old) => {
     const d = document.querySelector('#code-dialog[open] #pair-code-display');
     return d && d.textContent.replace(/\D/g, '') !== old;
-  }, code, { timeout: 20000 });
+  }, code, { timeout: PAIR_TIMEOUT });
   const code2 = await R.$eval('#pair-code-display', (el) => el.textContent.replace(/\D/g, ''));
-  await L.waitForSelector('#pair-dialog[data-stage="waiting_code"]', { timeout: 20000 });
+  await waitState(L, () => window.__edgehop.state.pairing && window.__edgehop.state.pairing.stage === 'waiting_code', 'Left is waiting for the second code', PAIR_TIMEOUT);
+  await L.waitForSelector('#pair-dialog[data-stage="waiting_code"]', { timeout: PAIR_TIMEOUT });
   await L.fill('#pair-code', code2);
   await L.click('#pair-confirm');
-  await L.waitForSelector('#pair-dialog[data-stage="paired"]', { timeout: 20000 });
+  await waitState(L, () => window.__edgehop.state.pairing && window.__edgehop.state.pairing.stage === 'paired', 'backend reports paired', PAIR_TIMEOUT);
+  await L.waitForSelector('#pair-dialog[data-stage="paired"]', { timeout: PAIR_TIMEOUT });
   await L.click('#pair-done');
-  await R.waitForSelector('#code-dialog[open]', { state: 'detached', timeout: 10000 });
+  await R.waitForSelector('#code-dialog[open]', { state: 'detached', timeout: PAIR_TIMEOUT });
 
-  await waitState(L, () => window.__edgehop.state.peers.some((p) => p.name === 'Right' && p.paired && p.status === 'online'), 'Left shows Right online');
-  await waitState(R, () => window.__edgehop.state.peers.some((p) => p.name === 'Left' && p.paired && p.status === 'online'), 'Right shows Left online');
+  await waitState(L, () => window.__edgehop.state.peers.some((p) => p.name === 'Right' && p.paired && p.status === 'online'), 'Left shows Right online', PAIR_TIMEOUT);
+  await waitState(R, () => window.__edgehop.state.peers.some((p) => p.name === 'Left' && p.paired && p.status === 'online'), 'Right shows Left online', PAIR_TIMEOUT);
   const leftId = sL.self.id;
   const rightId = sR.self.id;
   await t.expect(await L.$eval(`.eh-peer[data-id="${rightId}"] .badge`, (e) => e.textContent), /Online/);
