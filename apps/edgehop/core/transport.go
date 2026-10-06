@@ -109,6 +109,7 @@ type pairing struct {
 type dialer struct {
 	id   string
 	stop chan struct{}
+	kick chan struct{}
 }
 
 // Transport owns the listener, Bonjour, the per-peer connections with their
@@ -143,7 +144,9 @@ func NewTransport(cfg TransportConfig) *Transport {
 	return &Transport{cfg: cfg, conns: map[string]*peerConn{}, dialers: map[string]*dialer{}, failures: map[string][]time.Time{}}
 }
 
-func (t *Transport) logf(level, format string, a ...any) { t.cfg.Logf(level, fmt.Sprintf(format, a...)) }
+func (t *Transport) logf(level, format string, a ...any) {
+	t.cfg.Logf(level, fmt.Sprintf(format, a...))
+}
 
 // Start listens, advertises, browses and starts the reconnect loops of the
 // paired peers this machine must connect to (smaller id).
@@ -253,6 +256,10 @@ func (t *Transport) onBrowse(e mdnsdisc.Event) {
 		t.logf("debug", "discovered %s at %s", d.Name, d.Addr)
 	}
 	t.cfg.Handler.Discovered(d)
+	if e.Added {
+		t.ensureDialer(id)
+		t.Poke(id)
+	}
 }
 
 // ---------------------------------------------------------------- connections
@@ -482,11 +489,25 @@ func (t *Transport) ensureDialer(id string) {
 		t.mu.Unlock()
 		return
 	}
-	d := &dialer{id: id, stop: make(chan struct{})}
+	d := &dialer{id: id, stop: make(chan struct{}), kick: make(chan struct{}, 1)}
 	t.dialers[id] = d
 	t.mu.Unlock()
 	t.wg.Add(1)
 	go t.dialLoop(d)
+}
+
+// Poke makes the reconnect loop of id (if any) try again right now, for
+// example when Bonjour just announced it.
+func (t *Transport) Poke(id string) {
+	t.mu.Lock()
+	d := t.dialers[id]
+	t.mu.Unlock()
+	if d != nil {
+		select {
+		case d.kick <- struct{}{}:
+		default:
+		}
+	}
 }
 
 func (t *Transport) dialLoop(d *dialer) {
@@ -499,6 +520,8 @@ func (t *Transport) dialLoop(d *dialer) {
 		case <-t.ctx.Done():
 			return false
 		case <-time.After(dur):
+			return true
+		case <-d.kick:
 			return true
 		}
 	}

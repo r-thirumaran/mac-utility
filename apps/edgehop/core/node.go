@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/r-thirumaran/mac-utility/apps/edgehop/input"
-	"github.com/r-thirumaran/mac-utility/shared/keymap"
 	"github.com/r-thirumaran/mac-utility/shared/go/securechan"
+	"github.com/r-thirumaran/mac-utility/shared/keymap"
 )
 
 // Liveness constants (docs/edgehop-protocol.md §6 ping/pong) and the input
@@ -21,8 +21,8 @@ const (
 	receivingWindow = 2 * time.Second
 )
 
-// Transport is what the Node needs from the network layer.
-type Transport interface {
+// Sender is what the Node needs from the network layer (*Transport implements it).
+type Sender interface {
 	// Send queues one encrypted frame payload (type byte || body) for peerID.
 	Send(peerID string, frame []byte) error
 	// Broadcast queues the frame for every connected peer.
@@ -105,7 +105,7 @@ type Config struct {
 	Store                   *PeerStore
 	Capturer                input.Capturer
 	Injector                input.Injector
-	Transport               Transport
+	Transport               Sender
 	Clipboard               Clipboard
 	// Now overrides the clock (tests). nil = time.Now.
 	Now func() time.Time
