@@ -113,7 +113,7 @@ replies `{"t":"error","code":"unpaired"}` and closes.
 | 0x01 | control | UTF-8 JSON object with `t` (section 6) |
 | 0x02 | mouse_move | `i16 dx, i16 dy` relative, in the sender's pixels |
 | 0x03 | mouse_button | `u8 button (0 left, 1 right, 2 middle, 3 back, 4 forward), u8 state (1 down, 0 up), u8 clickCount` |
-| 0x04 | scroll | `i16 dx, i16 dy, u8 flags` — units: 120 = one wheel notch; continuous (trackpad) deltas are pixels; `flags bit0` = discrete wheel, `bit1` = momentum phase |
+| 0x04 | scroll | `i16 dx, i16 dy, u8 flags` — units: 120 = one wheel notch; continuous (trackpad) deltas are pixels; positive `dy` = wheel rotated forward (away from the user), positive `dx` = right; `flags bit0` = discrete wheel, `bit1` = momentum phase |
 | 0x05 | key | `u16 hidUsage, u8 state (1 down, 0 up, 2 repeat), u8 modifiers` — `modifiers` is the HID modifier byte (bit0 LCtrl, bit1 LShift, bit2 LAlt, bit3 LGUI, bit4 RCtrl, bit5 RShift, bit6 RAlt, bit7 RGUI); modifier keys are ALSO sent as their own key events (usage 0xE0…0xE7) |
 | 0x06 | key_text | UTF-8 text to type verbatim (used for characters the key table cannot express, e.g. emoji, dead-key results) |
 
@@ -133,7 +133,7 @@ cross-platform pairs.
 | `t` | direction | fields |
 |---|---|---|
 | `auth` / `auth_ok` | first encrypted frames (section 4) | — |
-| `info` | both, right after auth | `name, plat, version, displays: [{id, x, y, w, h, scale, primary}]` — desktop union coordinates, origin top-left, y down (macOS implementations convert from AppKit's flipped coordinates) |
+| `info` | both, right after auth | `name, plat, version, port?, displays: [{id, x, y, w, h, scale, primary}]` — desktop union coordinates, origin top-left, y down (macOS implementations convert from AppKit's flipped coordinates); `port` is the sender's listening TCP port so a peer first reached by a typed address can be re-dialled |
 | `displays` | both, on change | same `displays` field |
 | `layout` | both | `{updatedAt (ms epoch), tiles: [{id, col, row}]}` newest wins; receivers persist it |
 | `active` | the machine handing over control → **every** connected peer | `{id: newActive, from: previousActive, enter: {edge: "left"\|"right"\|"top"\|"bottom", frac: 0..1}, buttons: u8 bitmask, modifiers: u8, seq: u32}` — `enter.edge` is the edge of the **new** machine the cursor arrives on; `frac` is the position along that edge (0 = top/left). `seq` increases per transition; a receiver ignores an `active` with a `seq` lower than the last one seen from any peer |
@@ -172,6 +172,17 @@ Default `Ctrl+Alt+←/→/↑/↓` (configurable) moves control to the neighbour
 direction from the active machine, placing the cursor in the centre of the new
 machine. `Ctrl+Alt+Home` returns control to the machine the hotkey was pressed
 on (`claim`).
+
+### 6.3 Resolutions (normative; both implementations follow these)
+
+* `seq`: every node keeps the maximum it has seen; `claim` and `active` both increment it; a message with an equal `seq` is accepted, only a smaller one is stale.
+* Entry point: the opposite edge at the same union fraction, inset 1 px; if no display owns that point, the nearest point of any display.
+* Edge geometry: the right/bottom edge is the last pixel column/row (where the OS clamps the cursor); left/top is `≤ minX/minY`. The corner dead zone is measured along the merged run of displays that touch that edge, so a join between two monitors on one edge is not a corner.
+* Only the machine that was active locks and hides its cursor when control leaves it.
+* Peer vanished (15 s silence or a closed socket): control returns to a machine only if it had forwarded to or handed to that peer (it then sends `claim`); otherwise it reverts to itself silently.
+* Clipboard is sent only by the hand-over side, to the new active machine, only when it holds non-empty text.
+* `hello.pair = true` from an unknown key always gets a code (`hello_ack.pair = !known`); the code is shown only on the acceptor.
+* A trusted dial to an acceptor that does not trust the initiator yields `{"t":"error","code":"unpaired"}`; the initiator reports "pair again".
 
 ## 7. Safety and limits
 

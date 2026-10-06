@@ -12,7 +12,7 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 |---|---|---|---|---|
 | Clipwell | window snapping + clipboard history (copied from r-thirumaran/Clipwell) | CI builds DMG (green) | n/a (macOS-only app) | n/a |
 | Vitals | CPU / RAM / GPU / process monitor + power & lid-close settings | DMG built by CI (f6ad584) | exe built by CI, Go tests green on Linux + Windows | n/a |
-| Edgehop | one mouse + keyboard across Macs and Windows PCs (screen-edge switching) | not started | not started | n/a |
+| Edgehop | one mouse + keyboard across Macs and Windows PCs (screen-edge switching) | mac app in progress (batch 2) | Go core + Windows backend + UI committed, tests green | n/a |
 | Reach | control any laptop from your phone (agent + mobile app) | mac agent in progress (batch 2) | Go agent committed, tests green | PWA committed (Playwright-tested); Capacitor wrapper pending |
 
 ## Phase 0 — scaffold
@@ -33,7 +33,7 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 - [x] shared/swift (menubar, WKWebView bridge, mini http+ws server, framing, crypto, admin runner) — type-checks on macos-15; XCTest suites run on macOS + Linux in CI
 - [x] shared/ui (native.js bridge shim, base CSS, charts, components, demo) — Playwright test green
 - [x] Vitals mac / win / ui — win backend + ui (6447c63); mac backend compiles and the Vitals DMG job is green (f6ad584)
-- [ ] Edgehop core + mac + win + ui — batch 1 agent finishing core/win/ui (core + transport + tests committed); mac in batch 2
+- [ ] Edgehop core + mac + win + ui — core/win/ui DONE (Go unit + integration tests, two-instance Playwright test green); mac agent running
 - [ ] Reach agent mac / win + PWA + Capacitor mobile project — win agent + PWA DONE (commit 956f3ee); mac agent running (batch 2); Capacitor pending
 - [x] Icons for every app (`Tools/make_icons.py` → icns, ico, PWA PNGs)
 
