@@ -13,7 +13,7 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 | Clipwell | window snapping + clipboard history (copied from r-thirumaran/Clipwell) | CI builds DMG (green) | n/a (macOS-only app) | n/a |
 | Vitals | CPU / RAM / GPU / process monitor + power & lid-close settings | mac backend in progress (batch 2) | Go backend + UI committed, tests green on Linux | n/a |
 | Edgehop | one mouse + keyboard across Macs and Windows PCs (screen-edge switching) | not started | not started | n/a |
-| Reach | control any laptop from your phone (agent + mobile app) | not started | not started | not started |
+| Reach | control any laptop from your phone (agent + mobile app) | mac agent in progress (batch 2) | Go agent committed, tests green | PWA committed (Playwright-tested); Capacitor wrapper pending |
 
 ## Phase 0 — scaffold
 - [x] Copy Clipwell source into `apps/clipwell/` (from r-thirumaran/Clipwell@dbdd2cd)
@@ -34,7 +34,7 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 - [x] shared/ui (native.js bridge shim, base CSS, charts, components, demo) — Playwright test green
 - [ ] Vitals mac / win / ui — win backend + ui DONE (commit 6447c63, Go tests + Playwright green); mac backend agent running (batch 2)
 - [ ] Edgehop core + mac + win + ui — batch 1 agent finishing core/win/ui (core + transport + tests committed); mac in batch 2
-- [ ] Reach agent mac / win + PWA + Capacitor mobile project — batch 1 agent building win agent + PWA; mac in batch 2; Capacitor after the PWA exists
+- [ ] Reach agent mac / win + PWA + Capacitor mobile project — win agent + PWA DONE (commit 956f3ee); mac agent running (batch 2); Capacitor pending
 - [x] Icons for every app (`Tools/make_icons.py` → icns, ico, PWA PNGs)
 
 ## Phase 3 — verification
