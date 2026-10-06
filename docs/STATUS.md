@@ -12,7 +12,7 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 |---|---|---|---|---|
 | Clipwell | window snapping + clipboard history (copied from r-thirumaran/Clipwell) | CI builds DMG (green) | n/a (macOS-only app) | n/a |
 | Vitals | CPU / RAM / GPU / process monitor + power & lid-close settings | DMG built by CI (f6ad584) | exe built by CI, Go tests green on Linux + Windows | n/a |
-| Edgehop | one mouse + keyboard across Macs and Windows PCs (screen-edge switching) | mac app in progress (batch 2) | Go core + Windows backend + UI committed, tests green | n/a |
+| Edgehop | one mouse + keyboard across Macs and Windows PCs (screen-edge switching) | DMG built by CI (d98fa5b) | Go core + Windows backend + UI committed, tests green | n/a |
 | Reach | control any laptop from your phone (agent + mobile app) | DMG built by CI (cd17a03) | Go agent committed, tests green on Linux + Windows, exe built | PWA committed (Playwright-tested); Capacitor 8 Android + iOS projects; APK built by CI (989dbc4) |
 
 ## Phase 0 — scaffold
@@ -33,18 +33,18 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 - [x] shared/swift (menubar, WKWebView bridge, mini http+ws server, framing, crypto, admin runner) — type-checks on macos-15; XCTest suites run on macOS + Linux in CI
 - [x] shared/ui (native.js bridge shim, base CSS, charts, components, demo) — Playwright test green
 - [x] Vitals mac / win / ui — win backend + ui (6447c63); mac backend compiles and the Vitals DMG job is green (f6ad584)
-- [ ] Edgehop core + mac + win + ui — core/win/ui DONE; mac app written and added to the macOS CI matrix — fix compile errors until the Edgehop DMG job is green
+- [x] Edgehop core + mac + win + ui — core/win/ui DONE; mac app compiles, Edgehop DMG job green (d98fa5b)
 - [ ] Reach agent mac / win + PWA + Capacitor mobile project — win agent + PWA DONE (commit 956f3ee); mac agent running (batch 2); Capacitor pending
 - [x] Icons for every app (`Tools/make_icons.py` → icns, ico, PWA PNGs)
 
 ## Phase 3 — verification
 - [x] Go unit + integration tests green on Linux and Windows runners (run 37408123728: Vitals, Edgehop, Reach all pass natively on windows-latest; three exes built)
 - [x] Web UI Playwright tests green on CI (kit, Vitals, Edgehop two-instance pairing + hop, Reach phone flow) — run on fe3600d after fixing a real pairing-dialog race
-- [ ] macOS DMGs for all four apps built by CI
+- [x] macOS DMGs for all four apps built by CI (Clipwell, Vitals, Edgehop d98fa5b, Reach cd17a03)
 - [x] Windows exes for Vitals, Edgehop, Reach built by CI (artifact windows-exe)
 - [x] Android APK for Reach built by CI (job 'Reach Android APK (Capacitor)' green on 989dbc4; artifact reach-android-apk)
-- [ ] Adversarial code review pass per component, findings fixed
-- [ ] README per app with install + permission walkthrough
+- [ ] Adversarial code review pass per component, findings fixed — running: Windows-only Go paths; Vitals + Reach Swift runtime; Edgehop Swift runtime
+- [x] README per app with install + permission walkthrough (apps/*/README.md) and the top-level README
 
 ## Orchestration plan (resume here after a usage-limit pause)
 1. Batch 1 (running): three Linux-testable agents — Vitals win+ui, Edgehop core/win/ui, Reach win+PWA. Commit each as it lands; CI (go-linux, go-windows) must be green.
