@@ -4,7 +4,17 @@ on:
   push:
     branches: ['**']
     tags: ['v*']
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'releases/**'
+      - 'LICENSE'
   workflow_dispatch:
+
+# A newer push to the same branch cancels the runs still going for older commits.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
   contents: write
@@ -13,25 +23,73 @@ env:
   MAC_APPS: clipwell vitals edgehop reach
 
 jobs:
+  # Decide which macOS apps need rebuilding. macOS runner minutes cost ten times Linux
+  # minutes, so a DMG is only rebuilt when that app, the shared Swift/UI code, the build
+  # tools or this workflow changed (always on tags and manual runs).
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    outputs:
+      clipwell: ${{ steps.diff.outputs.clipwell }}
+      vitals: ${{ steps.diff.outputs.vitals }}
+      edgehop: ${{ steps.diff.outputs.edgehop }}
+      reach: ${{ steps.diff.outputs.reach }}
+      swift: ${{ steps.diff.outputs.swift }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: diff
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* || "${GITHUB_EVENT_NAME}" == workflow_dispatch || -z "${{ github.event.before }}" || "${{ github.event.before }}" == 0000000000000000000000000000000000000000 ]]; then
+            files="ALL"
+          else
+            files=$(git diff --name-only "${{ github.event.before }}" "${GITHUB_SHA}" 2>/dev/null || echo ALL)
+          fi
+          echo "$files" | head -50
+          common='^(shared/swift/|shared/ui/|shared/keymap/|Tools/|Makefile|\.github/workflows/)'
+          for app in clipwell vitals edgehop reach; do
+            if [[ "$files" == "ALL" ]] || echo "$files" | grep -Eq "^apps/$app/|$common"; then v=true; else v=false; fi
+            echo "$app=$v" >> "$GITHUB_OUTPUT"; echo "$app: $v"
+          done
+          if [[ "$files" == "ALL" ]] || echo "$files" | grep -Eq '^shared/swift/|^\.github/workflows/'; then echo "swift=true" >> "$GITHUB_OUTPUT"; else echo "swift=false" >> "$GITHUB_OUTPUT"; fi
+
   macos:
     name: macOS DMG (${{ matrix.app }})
+    needs: changes
+    if: ${{ always() && needs.changes.result == 'success' }}
     runs-on: macos-15
     strategy:
       fail-fast: false
       matrix:
         app: [clipwell, vitals, edgehop, reach]
     steps:
+      - name: Skip when nothing relevant changed
+        id: gate
+        shell: bash
+        run: |
+          case "${{ matrix.app }}" in
+            clipwell) v="${{ needs.changes.outputs.clipwell }}";; vitals) v="${{ needs.changes.outputs.vitals }}";;
+            edgehop) v="${{ needs.changes.outputs.edgehop }}";; reach) v="${{ needs.changes.outputs.reach }}";;
+          esac
+          echo "build=$v" >> "$GITHUB_OUTPUT"; echo "build ${{ matrix.app }}: $v"
       - uses: actions/checkout@v4
+        if: steps.gate.outputs.build == 'true'
       - name: Toolchain
+        if: steps.gate.outputs.build == 'true'
         run: |
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer || true
           xcodebuild -version || true
           swift --version
       - name: Build DMG
+        if: steps.gate.outputs.build == 'true'
         run: make dmg-${{ matrix.app }}
       - name: Checksums
+        if: steps.gate.outputs.build == 'true'
         run: cd dist-out && shasum -a 256 *.dmg | tee SHA256SUMS-${{ matrix.app }}-macos.txt
       - uses: actions/upload-artifact@v4
+        if: steps.gate.outputs.build == 'true'
         with:
           name: ${{ matrix.app }}-macos-dmg
           path: |
@@ -193,6 +251,8 @@ jobs:
 
   shared-swift:
     name: shared/swift (macOS typecheck + tests)
+    needs: changes
+    if: ${{ always() && needs.changes.result == 'success' && needs.changes.outputs.swift == 'true' }}
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
