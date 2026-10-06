@@ -21,7 +21,8 @@ set -euo pipefail
 APP_DIR="${1:?usage: build_mac_app.sh <app-dir> [debug|release]}"
 CONFIG="${2:-release}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_DIR="$(cd "$ROOT/$APP_DIR" 2>/dev/null && pwd || cd "$APP_DIR" && pwd)"
+if [[ -d "$ROOT/$APP_DIR" ]]; then APP_DIR="$ROOT/$APP_DIR"; fi
+APP_DIR="$(cd "$APP_DIR" && pwd)"
 PLIST="$APP_DIR/mac/Info.plist"
 DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-14.0}"
 
