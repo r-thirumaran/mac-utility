@@ -151,10 +151,10 @@ jobs:
           npx cap sync android
       - name: Gradle assembleDebug
         working-directory: apps/reach/mobile/android
-        env:
-          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx3g
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
+          # Licences are already accepted on the hosted image; this only matters if AGP has to fetch platform 36.
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
       - name: Collect APK

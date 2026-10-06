@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
-// The app version is apps/reach/VERSION (shared with the agents): 0.1.0 → versionName "0.1.0", versionCode 100.
-def reachVersion = new File(rootDir, '../VERSION').text.trim()
+// The app version is apps/reach/VERSION (../../VERSION from this Gradle root, shared with the agents): 0.1.0 → versionName "0.1.0", versionCode 100.
+def reachVersion = new File(rootDir, '../../VERSION').text.trim()
 def reachVersionParts = (reachVersion =~ /^(\d+)\.(\d+)\.(\d+)/)
 def reachVersionCode = reachVersionParts ? reachVersionParts[0][1].toInteger() * 10000 + reachVersionParts[0][2].toInteger() * 100 + reachVersionParts[0][3].toInteger() : 1
 

@@ -224,13 +224,16 @@ final class ReachMethods {
         case "reach.state":
             completion(.success(api.state()))
         case "reach.settings.set":
-            completion(.success(try api.applySettings(params)))
+            let state = try api.applySettings(params)
+            completion(.success(state))
         case "reach.pairings.list":
             completion(.success(api.pairings.publicPairings))
         case "reach.pairings.revoke":
-            completion(.success(try api.revoke(device: ReachMethods.string(params, "device") ?? "")))
+            let remaining = try api.revoke(device: ReachMethods.string(params, "device") ?? "")
+            completion(.success(remaining))
         case "reach.pair.showCode":
-            completion(.success(try api.showCodeLocally()))
+            let issued = try api.showCodeLocally()
+            completion(.success(issued))
 
         default:
             throw ReachError.notFound("unknown method \"\(method)\"")

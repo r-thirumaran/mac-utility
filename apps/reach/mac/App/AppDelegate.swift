@@ -11,6 +11,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private static let windowMinSize = NSSize(width: 720, height: 520)
     private static let pageProbeInterval: TimeInterval = 0.1
     private static let pageProbeLimit = 100
+    /// Falls back to a plain title if neither symbol exists, so the item is never invisible.
+    private static let menuBarImage = NSImage(systemSymbolName: "iphone.radiowaves.left.and.right", accessibilityDescription: "Reach")
+        ?? NSImage(systemSymbolName: "antenna.radiowaves.left.and.right", accessibilityDescription: "Reach")
 
     private let bridge: NativeBridge
     private let notifier = Notifier()
@@ -18,8 +21,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private let api: ReachAPI
     private lazy var reachBridge = ReachBridge(bridge: bridge, api: api)
     private lazy var statusItem = StatusItemHost(
-        image: NSImage(systemSymbolName: "iphone.radiowaves.left.and.right", accessibilityDescription: "Reach"),
-        title: nil)
+        image: AppDelegate.menuBarImage,
+        title: AppDelegate.menuBarImage == nil ? "Reach" : nil)
 
     private var window: WebWindowController?
     private var launchAtLoginItem: NSMenuItem?

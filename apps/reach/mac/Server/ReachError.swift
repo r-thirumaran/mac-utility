@@ -16,9 +16,11 @@ struct ReachError: Error {
 
     let code: String
     let message: String
-    let details: [String: Any]?
+    /// Structured hints, e.g. `{"permission": "accessibility"}`. String-valued so the error
+    /// stays `Sendable` like every `Error`.
+    let details: [String: String]?
 
-    init(code: String, message: String, details: [String: Any]? = nil) {
+    init(code: String, message: String, details: [String: String]? = nil) {
         self.code = code
         self.message = message
         self.details = details
