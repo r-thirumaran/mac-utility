@@ -43,7 +43,7 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 - [x] macOS DMGs for all four apps built by CI (Clipwell, Vitals, Edgehop d98fa5b, Reach cd17a03)
 - [x] Windows exes for Vitals, Edgehop, Reach built by CI (artifact windows-exe)
 - [x] Android APK for Reach built by CI (job 'Reach Android APK (Capacitor)' green on 989dbc4; artifact reach-android-apk)
-- [ ] Adversarial code review pass per component, findings fixed — running: Windows-only Go paths; Vitals + Reach Swift runtime; Edgehop Swift runtime
+- [ ] Adversarial code review pass per component, findings fixed — DONE: Windows-only Go paths (23d3a81), Vitals + Reach Swift runtime (9a8e7b1); running: Edgehop Swift runtime
 - [x] README per app with install + permission walkthrough (apps/*/README.md) and the top-level README
 
 ## Orchestration plan (resume here after a usage-limit pause)
