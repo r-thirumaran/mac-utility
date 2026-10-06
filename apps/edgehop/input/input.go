@@ -8,6 +8,11 @@
 // the `displays` field of docs/edgehop-protocol.md §6 describes them.
 package input
 
+import "errors"
+
+// ErrNotSupported is returned by NewNative on platforms without a backend.
+var ErrNotSupported = errors.New("input: no native backend on this platform")
+
 // Kind classifies an Event.
 type Kind int
 

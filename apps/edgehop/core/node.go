@@ -2,7 +2,9 @@ package core
 
 import (
 	"fmt"
+	"net"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -531,7 +533,7 @@ func (n *Node) infoMsg(t string) InfoMsg {
 	if d == nil {
 		d = []Display{}
 	}
-	return InfoMsg{T: t, Name: n.self.Name, Plat: n.self.Plat, Version: n.self.Version, Displays: d}
+	return InfoMsg{T: t, Name: n.self.Name, Plat: n.self.Plat, Version: n.self.Version, Port: n.port, Displays: d}
 }
 
 func (n *Node) displaysChanged() {
@@ -719,6 +721,7 @@ func (n *Node) handleControl(p *peerState, msg Message) {
 			}
 			p.version = m.Version
 			_ = n.cfg.Store.UpdatePeerInfo(p.id, p.name, p.plat)
+			n.learnPort(p, m.Port)
 		}
 		n.emitState()
 	case TLayout:
@@ -811,6 +814,24 @@ func (n *Node) handleControl(p *peerState, msg Message) {
 	default:
 		n.logf("debug", "unknown control %q from %s", msg.T, n.peerName(p.id))
 	}
+}
+
+// learnPort replaces the port of the peer's known address with the port it
+// says it listens on (the remote port of an inbound connection is ephemeral).
+func (n *Node) learnPort(p *peerState, port int) {
+	if port <= 0 || port > 65535 || p.addr == "" {
+		return
+	}
+	host, _, err := net.SplitHostPort(p.addr)
+	if err != nil || host == "" {
+		return
+	}
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
+	if addr == p.addr {
+		return
+	}
+	p.addr = addr
+	_ = n.cfg.Store.SetLastAddr(p.id, addr)
 }
 
 // setRemoteActive records that id (a peer) is now active.

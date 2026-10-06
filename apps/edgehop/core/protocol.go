@@ -57,12 +57,16 @@ var ErrUnknownType = errors.New("edgehop: unknown frame type")
 
 // ---------------------------------------------------------------- control
 
-// InfoMsg is `info` (right after auth) and `displays` (on change).
+// InfoMsg is `info` (right after auth) and `displays` (on change). Port is
+// an optional extension: the TCP port the sender listens on, so a machine
+// that accepted a manually addressed pairing (no Bonjour) learns where to
+// reconnect. Receivers that do not know the field ignore it.
 type InfoMsg struct {
 	T        string    `json:"t"`
 	Name     string    `json:"name,omitempty"`
 	Plat     string    `json:"plat,omitempty"`
 	Version  string    `json:"version,omitempty"`
+	Port     int       `json:"port,omitempty"`
 	Displays []Display `json:"displays"`
 }
 

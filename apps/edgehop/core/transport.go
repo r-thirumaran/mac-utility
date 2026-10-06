@@ -125,6 +125,7 @@ type Transport struct {
 	mu       sync.Mutex
 	conns    map[string]*peerConn
 	dialers  map[string]*dialer
+	pending  map[net.Conn]struct{} // connections still in their handshake
 	pairing  *pairing
 	failures map[string][]time.Time
 	stopMDNS func()
@@ -141,7 +142,28 @@ func NewTransport(cfg TransportConfig) *Transport {
 	if cfg.Emit == nil {
 		cfg.Emit = func(Event) {}
 	}
-	return &Transport{cfg: cfg, conns: map[string]*peerConn{}, dialers: map[string]*dialer{}, failures: map[string][]time.Time{}}
+	return &Transport{cfg: cfg, conns: map[string]*peerConn{}, dialers: map[string]*dialer{}, pending: map[net.Conn]struct{}{}, failures: map[string][]time.Time{}}
+}
+
+// track remembers a connection whose handshake is in progress so Stop can
+// close it; the returned func forgets it again.
+func (t *Transport) track(conn net.Conn) func() {
+	t.mu.Lock()
+	t.pending[conn] = struct{}{}
+	t.mu.Unlock()
+	return func() {
+		t.mu.Lock()
+		delete(t.pending, conn)
+		t.mu.Unlock()
+	}
+}
+
+// Bind points the transport at the node that handles its events and
+// resolves peer addresses. Apps create the transport first (the node needs
+// it as its Sender) and bind the node afterwards, before Start.
+func (t *Transport) Bind(n *Node) {
+	t.cfg.Handler = n
+	t.cfg.AddrFor = n.PeerAddr
 }
 
 func (t *Transport) logf(level, format string, a ...any) {
@@ -186,6 +208,9 @@ func (t *Transport) Stop() {
 	t.mu.Lock()
 	for _, c := range t.conns {
 		c.close()
+	}
+	for c := range t.pending {
+		_ = c.Close()
 	}
 	for _, d := range t.dialers {
 		close(d.stop)
@@ -296,6 +321,7 @@ func (t *Transport) handleInbound(conn net.Conn) {
 		_ = tc.SetKeepAlive(true)
 	}
 	_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))
+	untrack := t.track(conn)
 	var (
 		pairPeer securechan.PeerInfo
 		paired   bool
@@ -313,6 +339,7 @@ func (t *Transport) handleInbound(conn net.Conn) {
 		t.cfg.Emit(Event{"edgehop.pairCode", PairCode{Code: code, Peer: Machine{ID: peer.ID, Name: peer.Name, Plat: peer.Plat}, TTL: int(securechan.CodeTTL / time.Second)}})
 	}
 	ch, info, err := securechan.Accept(conn, opts)
+	untrack()
 	if err != nil {
 		_ = conn.Close()
 		if paired {
@@ -579,7 +606,9 @@ func (t *Transport) dialOnce(id, addr string, verbose bool) bool {
 		_ = tc.SetKeepAlive(true)
 	}
 	_ = conn.SetDeadline(time.Now().Add(handshakeTimeout))
+	untrack := t.track(conn)
 	ch, info, err := securechan.Initiate(conn, t.options())
+	untrack()
 	if err != nil {
 		_ = conn.Close()
 		if errors.Is(err, securechan.ErrUnpaired) {
@@ -666,13 +695,14 @@ func (t *Transport) PairCancel() {
 
 func (t *Transport) runPairing(p *pairing) {
 	defer t.wg.Done()
-	defer func() {
+	finish := func() {
 		t.mu.Lock()
 		if t.pairing == p {
 			t.pairing = nil
 		}
 		t.mu.Unlock()
-	}()
+	}
+	defer finish()
 	emit := func(stage, errText string) {
 		t.cfg.Emit(Event{"edgehop.pairing", PairingState{Stage: stage, PeerID: p.peerID, Address: p.addr, Error: errText}})
 	}
@@ -684,6 +714,8 @@ func (t *Transport) runPairing(p *pairing) {
 		return
 	}
 	_ = conn.SetDeadline(time.Now().Add(pairingTimeout))
+	untrack := t.track(conn)
+	defer untrack()
 	opts := t.options()
 	opts.Pair = true
 	opts.AskCode = func() (string, error) {
@@ -714,6 +746,7 @@ func (t *Transport) runPairing(p *pairing) {
 	_ = conn.SetDeadline(time.Time{})
 	t.logf("info", "paired with %s", info.Name)
 	t.cfg.Emit(Event{"edgehop.pairing", PairingState{Stage: "paired", PeerID: info.ID, Name: info.Name, Address: p.addr}})
+	finish() // the next pairing may start while this connection lives on
 	t.ensureDialer(info.ID)
 	t.run(ch, conn, info, p.addr)
 }

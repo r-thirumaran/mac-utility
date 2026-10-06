@@ -12,9 +12,9 @@ var (
 		{ID: "a", X: 0, Y: 0, W: 1920, H: 1080, Primary: true},
 		{ID: "b", X: 1920, Y: 200, W: 1280, H: 720},
 	}
-	// L-shape: a wide primary with a second display above its right half
+	// L-shape: a wide primary with a second display above its right part
 	lShape = []Display{
-		{ID: "a", X: 0, Y: 1080, W: 2560, H: 1440, Primary: true},
+		{ID: "a", X: 0, Y: 1080, W: 3200, H: 1440, Primary: true},
 		{ID: "b", X: 1280, Y: 0, W: 1920, H: 1080},
 	}
 	// a gap: two displays on the same row with 100 px between them
@@ -39,7 +39,7 @@ func TestUnion(t *testing.T) {
 		{"side", sideBySide, Rect{0, 0, 3200, 1080}},
 		{"l", lShape, Rect{0, 0, 3200, 2520}},
 		{"gap", gapped, Rect{0, 0, 2100, 800}},
-		{"neg", negative, Rect{-2560, -300, 4480, 1380}},
+		{"neg", negative, Rect{-2560, -300, 4480, 1440}},
 		{"none", nil, Rect{}},
 	}
 	for _, c := range cases {
@@ -102,8 +102,8 @@ func TestEdgeHit(t *testing.T) {
 		{"gap top run end is a corner", gapped, Point{990, 0}, 32, "", 0, false},
 
 		// negative origin
-		{"neg left on b", negative, Point{-2560, 400}, 32, EdgeLeft, 700.0 / 1380, true},
-		{"neg right on a", negative, Point{1919, 500}, 32, EdgeRight, 800.0 / 1380, true},
+		{"neg left on b", negative, Point{-2560, 400}, 32, EdgeLeft, 700.0 / 1440, true},
+		{"neg right on a", negative, Point{1919, 500}, 32, EdgeRight, 800.0 / 1440, true},
 		{"neg right row above a", negative, Point{1919, -100}, 32, "", 0, false},
 		{"neg top on b", negative, Point{-1000, -300}, 32, EdgeTop, 1560.0 / 4480, true},
 		{"neg bottom on b", negative, Point{-1000, 1139}, 32, EdgeBottom, 1560.0 / 4480, true},
@@ -134,7 +134,7 @@ func TestEntryPoint(t *testing.T) {
 		{"frac negative", EdgeLeft, -1, single, Point{1, 0}},
 		{"side right lands on b", EdgeRight, 0.5, sideBySide, Point{3198, 540}},
 		{"side right above b snaps down onto b", EdgeRight, 0.05, sideBySide, Point{3198, 200}},
-		{"l left above a snaps onto nearest display", EdgeLeft, 0.1, lShape, Point{1280, 252}},
+		{"l left above a snaps down onto a (nearest display)", EdgeLeft, 0.1, lShape, Point{1, 1080}},
 		{"neg top on b", EdgeTop, 0.25, negative, Point{-1440, -299}},
 		{"unknown edge centres", Edge("diagonal"), 0.5, single, Point{960, 540}},
 		{"no displays", EdgeLeft, 0.5, nil, Point{}},
