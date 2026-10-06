@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 env:
-  MAC_APPS: clipwell vitals
+  MAC_APPS: clipwell vitals reach
 
 jobs:
   macos:
@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [clipwell, vitals]
+        app: [clipwell, vitals, reach]
     steps:
       - uses: actions/checkout@v4
       - name: Toolchain

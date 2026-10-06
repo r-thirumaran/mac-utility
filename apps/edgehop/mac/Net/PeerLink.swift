@@ -44,7 +44,7 @@ final class PeerLink {
     weak var delegate: PeerLinkDelegate?
     /// Acceptor: decides synchronously (on the link queue) whether a pairing request may
     /// proceed — the rate limit of §4.
-    var pairingGate: ((PeerInfo) -> Bool)?
+    var pairingGate: (@Sendable (PeerInfo) -> Bool)?
 
     /// The authenticated peer once `auth` / `auth_ok` went through.
     private(set) var peer: PeerInfo?
