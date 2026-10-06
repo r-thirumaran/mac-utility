@@ -98,9 +98,9 @@ final class PeerLink {
             case .ready:
                 self.handleReady()
             case .waiting(let error):
-                self.fail(self.phase == .connecting ? "unreachable" : nil, detail: "waiting: \(error)")
+                self.fail(self.phase == .connecting ? "unreachable" : self.hangupReason(), detail: "waiting: \(error)")
             case .failed(let error):
-                self.fail(self.phase == .connecting ? "unreachable" : nil, detail: "failed: \(error)")
+                self.fail(self.phase == .connecting ? "unreachable" : self.hangupReason(), detail: "failed: \(error)")
             case .cancelled:
                 self.fail(nil, detail: nil)
             default:
@@ -151,9 +151,23 @@ final class PeerLink {
 
     /// Closes the connection; `reason` reaches the delegate.
     func close(reason: String? = nil) {
-        queue.async { [weak self] in
-            self?.fail(reason, detail: nil)
+        // Reviewer note: captured strongly so the socket is closed even when the transport
+        // drops its last reference right after this call (`Transport.stop`).
+        queue.async { self.fail(reason, detail: nil) }
+    }
+
+    deinit {
+        // A link released before its queue ran `close` must not leave the socket open.
+        connection.cancel()
+    }
+
+    /// The reason for a peer hanging up: while `auth_ok` is outstanding on a pairing dial it
+    /// refused our code (`ErrPairFailed` in `securechan.Initiate`), otherwise a plain close.
+    private func hangupReason() -> String? {
+        if phase == .awaitingAuth, isInitiator, handshake?.isPairing ?? false {
+            return "wrong_code"
         }
+        return nil
     }
 
     // MARK: - Connection (on `queue`)
@@ -218,11 +232,11 @@ final class PeerLink {
             }
             if self.phase == .closed { return }
             if let error {
-                self.fail(nil, detail: "receive: \(error)")
+                self.fail(self.hangupReason(), detail: "receive: \(error)")
                 return
             }
             if isComplete {
-                self.fail(nil, detail: "peer closed")
+                self.fail(self.hangupReason(), detail: "peer closed")
                 return
             }
             self.receiveLoop()

@@ -28,8 +28,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var identity = Identity()
         do {
             let directory = try IdentityStore.configDirectory()
-            store = try PeerStore(directory: directory)
+            // Reviewer note: the identity first, so an unreadable config.json does not also
+            // give this machine a new id (which would break every existing pairing).
             identity = try IdentityStore.load(from: directory)
+            store = try PeerStore(directory: directory)
         } catch {
             Log.error("config: \(error); running with an in-memory store")
         }

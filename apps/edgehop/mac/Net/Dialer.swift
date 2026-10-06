@@ -56,6 +56,15 @@ final class Dialer {
         }
     }
 
+    /// A connection to the peer that this loop did not dial (an inbound one, or the link of a
+    /// pairing) ended: dial again after the minimum backoff, as `dialLoop` does once the
+    /// existing connection's `done` closes.
+    func connectionEnded() {
+        guard !stopped, link == nil else { return }
+        backoff = Dialer.minBackoff
+        schedule(after: Dialer.minBackoff)
+    }
+
     // MARK: - Loop
 
     private func schedule(after seconds: TimeInterval) {

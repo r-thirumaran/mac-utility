@@ -38,6 +38,12 @@ final class Injector {
         self.keyMap = keyMap
         self.displays = displays
         source = CGEventSource(stateID: .hidSystemState)
+        // Reviewer note: tag the source as well as each posted event, so every event created
+        // from it carries `injectedMagic` into the tap; and drop the default 250 ms during
+        // which macOS suppresses local hardware input after each posted event, or a mouse or
+        // keyboard attached to this machine would stall while a remote one drives it.
+        source?.userData = EventTap.injectedMagic
+        source?.localEventsSuppressionInterval = 0
     }
 
     // MARK: - Cursor

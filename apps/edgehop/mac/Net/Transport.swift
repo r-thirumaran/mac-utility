@@ -255,6 +255,10 @@ final class Transport: FrameSender, PeerLinkDelegate {
                     self.poke(peerID)
                     return
                 }
+                // REVIEW: `onBrowse` in transport.go prefers an IPv4 address; this takes
+                // whichever the probe used, and `HostPort` strips the scope of a link-local
+                // IPv6 one, so the `lastAddr` remembered here may not be dialable later
+                // without Bonjour. Cannot be fixed here without changing shared/swift.
                 let addr = AddressParser.join(hostPort.host, Int(hostPort.port))
                 self.log("debug", "discovered \(name) at \(addr)")
                 self.onDiscovered?(Discovered(id: peerID, name: name, plat: service.txt["plat"] ?? "",
@@ -431,6 +435,13 @@ final class Transport: FrameSender, PeerLinkDelegate {
             link.close(reason: nil)
             return
         }
+        // Reviewer note: register the connection before a dialer is started for it, so
+        // `Dialer.run` sees it as connected instead of opening a second, redundant one.
+        if let old = connections[peer.id], old !== link {
+            log("debug", "replacing older connection to \(peer.name)")
+            old.close(reason: nil)
+        }
+        connections[peer.id] = link
         var addr = link.address
         switch link.role {
         case .acceptor:
@@ -450,11 +461,6 @@ final class Transport: FrameSender, PeerLinkDelegate {
                 ensureDialer(peer.id)
             }
         }
-        if let old = connections[peer.id], old !== link {
-            log("debug", "replacing older connection to \(peer.name)")
-            old.close(reason: nil)
-        }
-        connections[peer.id] = link
         onPeerUp?(peer, addr)
     }
 
@@ -483,6 +489,7 @@ final class Transport: FrameSender, PeerLinkDelegate {
         pendingLinks[ObjectIdentifier(link)] = nil
 
         // A trusted dial: tell its reconnect loop how it went.
+        var dialerInformed = false
         if let expected = link.expectedPeerID, let dialer = dialers[expected], dialer.link === link {
             if !link.isEstablished {
                 if reason == "unpaired" {
@@ -492,6 +499,7 @@ final class Transport: FrameSender, PeerLinkDelegate {
                 }
             }
             dialer.attemptEnded(established: link.isEstablished)
+            dialerInformed = true
         }
 
         // A pairing this machine started.
@@ -520,6 +528,12 @@ final class Transport: FrameSender, PeerLinkDelegate {
         // A live connection ended.
         if let peer = link.peer, connections[peer.id] === link {
             connections[peer.id] = nil
+            // Reviewer note: a connection this loop did not dial (inbound, or the link of a
+            // pairing) reports to no dialer, and `Dialer.run` returns early while connected,
+            // so without this the reconnect loop would sleep for ever once it ended.
+            if !dialerInformed, let dialer = dialers[peer.id] {
+                dialer.connectionEnded()
+            }
             onPeerDown?(peer.id)
         }
     }
