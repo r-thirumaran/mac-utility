@@ -142,7 +142,7 @@ func (w *winBackend) ClipboardGet() (string, error) {
 	if size > maxClipboard {
 		size = maxClipboard
 	}
-	units := unsafe.Slice((*uint16)(unsafe.Pointer(p)), size/2)
+	units := unsafe.Slice((*uint16)(ptrOf(p)), size/2)
 	n := 0
 	for n < len(units) && units[n] != 0 {
 		n++
@@ -173,7 +173,7 @@ func (w *winBackend) ClipboardSet(text string) error {
 		procGlobalFree.Call(h)
 		return fmt.Errorf("GlobalLock failed")
 	}
-	copy(unsafe.Slice((*uint16)(unsafe.Pointer(p)), len(units)), units)
+	copy(unsafe.Slice((*uint16)(ptrOf(p)), len(units)), units)
 	procGlobalUnlock.Call(h)
 	if r, _, e := procSetClipboardData.Call(cfUnicodeText, h); r == 0 {
 		procGlobalFree.Call(h)
@@ -181,6 +181,10 @@ func (w *winBackend) ClipboardSet(text string) error {
 	}
 	return nil // the system owns h now
 }
+
+// ptrOf turns a pointer returned by a Win32 call (GlobalLock) into an
+// unsafe.Pointer; the memory is not managed by the Go GC.
+func ptrOf(p uintptr) unsafe.Pointer { return *(*unsafe.Pointer)(unsafe.Pointer(&p)) }
 
 func (w *winBackend) OpenURL(url string) error { return winutil.OpenURL(url) }
 

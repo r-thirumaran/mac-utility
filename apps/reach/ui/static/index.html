@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#0b6bd9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1c1c1e" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Reach">
+  <title>Reach</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <link rel="stylesheet" href="./shared/base.css">
+  <link rel="stylesheet" href="./app.css">
+</head>
+<body>
+  <header class="toolbar app-toolbar">
+    <img class="app-logo" src="./icon-192.png" alt="" width="24" height="24">
+    <span class="toolbar-title" id="title">Reach</span>
+    <button type="button" class="conn-badge badge badge-dot" id="conn-badge" aria-live="polite">Not connected</button>
+  </header>
+  <div id="notices" class="notices"></div>
+  <main id="view" class="view" aria-live="off"></main>
+  <nav class="tabbar" id="tabbar" aria-label="Sections"></nav>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
