@@ -114,10 +114,67 @@ jobs:
             dist-out/SHA256SUMS-*.txt
           if-no-files-found: ignore
 
+  android:
+    name: Reach Android APK (Capacitor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          # Capacitor 8 compiles with Java 21 (apps/reach/mobile/android/app/capacitor.build.gradle).
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+          cache-dependency-path: |
+            apps/reach/mobile/android/**/*.gradle*
+            apps/reach/mobile/android/gradle/wrapper/gradle-wrapper.properties
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/reach/mobile/package-lock.json
+      - name: Debug keystore (optional secret, keeps every CI build installable over the previous one)
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            mkdir -p ~/.android && echo "$KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore
+            echo "using the ANDROID_DEBUG_KEYSTORE_B64 secret"
+          else
+            echo "no ANDROID_DEBUG_KEYSTORE_B64 secret: Gradle generates a fresh debug key (uninstall older builds before installing this one)"
+          fi
+      - name: Web bundle + Capacitor sync
+        working-directory: apps/reach/mobile
+        run: |
+          npm ci --no-audit --no-fund
+          npm run sync:www
+          npx cap sync android
+      - name: Gradle assembleDebug
+        working-directory: apps/reach/mobile/android
+        env:
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx3g
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+      - name: Collect APK
+        run: |
+          mkdir -p dist-out
+          v=$(tr -d '[:space:]' < apps/reach/VERSION)
+          cp apps/reach/mobile/android/app/build/outputs/apk/debug/app-debug.apk "dist-out/Reach-$v-android-debug.apk"
+          cd dist-out && sha256sum *.apk | tee SHA256SUMS-reach-android.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reach-android-apk
+          path: |
+            dist-out/*.apk
+            dist-out/SHA256SUMS-*.txt
+          if-no-files-found: error
+
   release:
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [macos, go-linux, go-windows]
+    needs: [macos, go-linux, go-windows, android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

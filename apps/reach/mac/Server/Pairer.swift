@@ -40,6 +40,16 @@ final class Pairer {
 
     // MARK: - Codes
 
+    /// The valid code, if one is outstanding (not consumed, not expired, not locked). Does
+    /// not issue a new one.
+    var outstanding: (code: String, expiresAt: Date)? {
+        lock.lock()
+        defer { lock.unlock() }
+        let now = Date()
+        guard !isLockedLocked(now), !code.isEmpty, now < expires else { return nil }
+        return (code, expires)
+    }
+
     /// The code to show for `device`: the outstanding one while it is valid, otherwise a fresh
     /// one. `nil` during a lockout.
     func request(device: String) -> (code: String, expiresAt: Date)? {

@@ -1,5 +1,5 @@
 // remote.js — trackpad, keyboard sheet and media bar.
-import { conn, call, tryCall, svg, ICONS, on, wakeLock, LOCAL } from './core.js';
+import { conn, call, tryCall, svg, ICONS, on, wakeLock, LOCAL, hooks } from './core.js';
 import { h, mount, sliderFill, debounce } from './shared/ui.js';
 
 const wake = wakeLock();
@@ -36,6 +36,7 @@ const round1 = (v) => Math.round(v * 10) / 10;
 function schedule() { if (!raf) raf = requestAnimationFrame(flush); }
 
 function click(button, count = 1) {
+  hooks.haptic?.();
   tryCall('mouse.click', { button, count });
 }
 

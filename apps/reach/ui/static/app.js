@@ -1,5 +1,5 @@
 // app.js — bootstrap: tabs, connection badge, permission notices, startup.
-import { LOCAL, conn, store, api, call, on, svg, PERMISSION_LABELS } from './core.js';
+import { LOCAL, WRAPPED, conn, store, api, call, on, svg, PERMISSION_LABELS } from './core.js';
 import { h, mount, applyStoredTheme, toast } from './shared/ui.js';
 import laptops from './laptops.js';
 import remote from './remote.js';
@@ -92,7 +92,7 @@ on('event:reach.pairCode', (d) => { lastPairCode = d?.code || null; });
 // ------------------------------------------------------------------ startup
 
 async function autoAddOrigin() {
-  if (LOCAL || location.protocol === 'capacitor:' || location.protocol === 'file:') return;
+  if (LOCAL || WRAPPED || location.protocol === 'file:') return;
   const host = location.hostname.replace(/^\[|\]$/g, '');
   const port = Number(location.port) || (location.protocol === 'https:' ? 443 : 80);
   if (!host) return;
@@ -115,9 +115,11 @@ async function start() {
   route();
 }
 
-if ('serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'capacitor:') {
+if ('serviceWorker' in navigator && window.isSecureContext && !WRAPPED) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
+// Inside the Capacitor app only: haptics and the Android back button.
+if (WRAPPED) import('./capacitor.js').then((m) => m.init()).catch((e) => console.warn('native layer unavailable', e));
 
 // Test and debugging hooks (read-only).
 window.__reach = {

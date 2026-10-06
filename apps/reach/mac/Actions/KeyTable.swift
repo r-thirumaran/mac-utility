@@ -117,18 +117,13 @@ final class KeyTable {
 
     /// The DOM code of the US-layout key that types `character`.
     static func domCode(for character: Character) -> String? {
-        guard let scalar = character.unicodeScalars.first, character.unicodeScalars.count == 1,
+        guard character.unicodeScalars.count == 1, let scalar = character.unicodeScalars.first,
               scalar.isASCII else { return nil }
-        let value = scalar.value
-        switch value {
-        case 0x61...0x7A: // a-z
-            return "Key" + String(Character(UnicodeScalar(value - 0x20) ?? scalar))
-        case 0x41...0x5A: // A-Z
-            return "Key" + String(character)
-        case 0x30...0x39: // 0-9
+        if character.isLetter {
+            return "Key" + String(character).uppercased()
+        }
+        if character.isNumber {
             return "Digit" + String(character)
-        default:
-            break
         }
         switch character {
         case " ": return "Space"

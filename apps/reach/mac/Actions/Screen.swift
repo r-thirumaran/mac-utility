@@ -123,9 +123,9 @@ enum ScreenCapture {
 
     /// Grabs display `index`, scaled to at most `maxWidth` pixels wide, as JPEG.
     static func capture(index: Int, maxWidth: Int, quality: Double) throws -> (width: Int, height: Int, jpeg: Data) {
-        let display = try display(at: index)
+        let target = try display(at: index)
         try ensurePermission()
-        guard let image = CGDisplayCreateImage(display.id) else {
+        guard let image = CGDisplayCreateImage(target.id) else {
             throw ReachError.internalError("display \(index) could not be captured")
         }
         let scaled = downscale(image, maxWidth: maxWidth)

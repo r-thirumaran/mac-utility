@@ -48,6 +48,30 @@ browser's **Add to Home Screen** (Safari: share sheet; Chrome: menu). It then
 opens full screen like an app. The Capacitor app (`apps/reach/mobile`, built in
 CI) ships the same files and needs no agent to load from.
 
+### Native apps (Android APK, iOS)
+
+The same files are also packaged as native apps by the Capacitor wrapper in
+`apps/reach/mobile` (details in `apps/reach/mobile/README.md`). An installed
+app keeps its pairings when the browser clears site data, has a proper icon,
+vibrates on trackpad taps and understands the Android back button; inside it
+the app talks to the agents over the network exactly like the PWA.
+
+* **Android** — every CI run (`.github/workflows/build.yml`, job *Reach Android
+  APK*) produces `Reach-<version>-android-debug.apk` as the artifact
+  `reach-android-apk`, and tagged releases attach it to the GitHub release.
+  Download it on the phone, allow installs from that app when Android asks and
+  open the file (or `adb install -r …`). It is a debug build signed with a
+  debug key: see the mobile README for keeping successive builds installable
+  over each other.
+* **iOS** — there is no CI build; on a Mac run `npm ci && npm run ios && npx
+  cap open ios` in `apps/reach/mobile` and press Run in Xcode with a personal
+  Apple ID (free account: the signature lasts seven days, re-run from Xcode to
+  renew). The first laptop connection triggers iOS's *local network* prompt;
+  allow it.
+
+Inside the wrapper the Laptops tab starts empty (no agent served the page): add
+the first laptop by address, the rest show up under *Nearby*.
+
 ### Pairing
 
 Every laptop must be paired once per phone:
@@ -89,5 +113,57 @@ itself offline.
 
 ## macOS agent
 
-The Swift menu-bar agent lives in `apps/reach/mac` and implements the same API;
-see its section once it lands.
+`Reach-<version>.dmg` (built by `make dmg-reach` on a Mac with the Command Line
+Tools, or by CI) holds `Reach.app`, a menu-bar agent written in Swift
+(`apps/reach/mac`, on top of `shared/swift`). It serves the same phone app on
+TCP 7788 and implements `docs/reach-api.md` exactly like the Windows exe, so a
+phone cannot tell the two apart beyond `platform: "macos"`.
+
+1. Drag `Reach.app` to `/Applications` and open it. It lives in the menu bar
+   (no Dock icon); the first launch opens the settings window and asks for the
+   two permissions below. The menu has *Open Reach*, *Show pairing code*,
+   *Launch at Login* and *Quit*.
+2. **Permissions** (System Settings ▸ Privacy & Security):
+   * **Accessibility** — needed to control the Mac at all: every synthetic
+     mouse, keyboard, media-key and text event is dropped silently without it.
+     A phone that tries gets `needs_permission` and a notice naming the switch.
+   * **Screen Recording** — needed for the Screen tab's live preview
+     (`screen.frame` / `screen.stream.*`) and for window titles in
+     `windows.list` (without it macOS hides other apps' titles and the list
+     falls back to app names). Takes effect after Reach is relaunched.
+   * **Automation ▸ System Events** is requested on the first *Restart* or
+     *Shut down* from a phone (lock, sleep and display-off need nothing extra).
+   * **Local Network** — on macOS 15 the first start shows the system's local
+     network prompt because the agent advertises itself with Bonjour and
+     browses for other agents; allow it, or phones cannot reach the port and
+     *Nearby* stays empty.
+
+   The build is ad-hoc signed, so rebuilding or updating the app changes its
+   code signature and macOS forgets the grants: switch Reach off and on again
+   in the Accessibility and Screen Recording lists after every rebuild.
+3. **Port** 7788 by default (changeable on the settings page; the new port
+   applies after a restart). The settings window shows the addresses phones
+   can open, a QR code, the paired devices (with *Revoke*) and the pairing
+   code when a phone asks for it or *Show pairing code* is chosen.
+4. **Pairing** works as described under *Phone app* below: the phone asks,
+   the Mac shows a six-digit code (notification + settings window) for two
+   minutes, five wrong codes lock pairing for ten minutes, and a token per
+   device name is stored in `~/Library/Application Support/Reach/config.json`
+   (0600). Logs go to unified logging under the `com.thiru.reach` subsystem
+   (`log stream --predicate 'subsystem == "com.thiru.reach"'`).
+
+What the agent does on macOS: the app list is a scan of `/Applications`,
+`~/Applications` and `/System/Applications` with Finder names and 64 px icons;
+running apps come from `NSWorkspace`, windows from the window server and are
+raised through the Accessibility API; input is posted as `CGEvent`s (relative
+and absolute mouse, pixel scrolling, Unicode typing in 20-character chunks,
+virtual key codes from the bundled HID key table, `⌘` for `cmdOrCtrl`); media
+keys are system-defined events like a keyboard's; volume uses AppleScript's
+`volume settings`; the screen preview is a display capture scaled and
+JPEG-encoded at up to 10 fps; lock uses the login framework (falling back to
+`CGSession -suspend` and ⌃⌘Q), sleep and display-off use `pmset`, and restart
+and shut down ask System Events. Nothing needs an administrator password.
+
+The **plaintext caveat** applies as much on macOS as on Windows: the pairing
+token and every keystroke travel as plain HTTP/WebSocket over the LAN, so use
+Reach only on networks you trust and revoke devices you no longer use.

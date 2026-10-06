@@ -15,6 +15,10 @@ const WK = !!window.webkit?.messageHandlers?.native;
 
 /** True when this page is the agent's own settings UI (WKWebView, or loopback with the local token). */
 export const LOCAL = WK || (LOOPBACK && !!(urlToken || storedToken));
+/** True inside the Capacitor wrapper (apps/reach/mobile): no agent at the page origin, no service worker. */
+export const WRAPPED = !!window.Capacitor?.isNativePlatform?.();
+/** Optional hooks the native wrapper fills in (see capacitor.js); null in a browser. */
+export const hooks = { haptic: null };
 
 // ------------------------------------------------------------------ storage
 
