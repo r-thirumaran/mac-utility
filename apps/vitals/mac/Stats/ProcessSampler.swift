@@ -196,8 +196,9 @@ final class ProcessSampler {
     /// `pbsi_comm` (NUL-terminated, at most 16 characters).
     private static func command(_ info: proc_bsdshortinfo) -> String {
         var command = info.pbsi_comm
+        let capacity = MemoryLayout.size(ofValue: command)   // computed before taking the pointer (exclusivity)
         return withUnsafePointer(to: &command) { pointer in
-            pointer.withMemoryRebound(to: CChar.self, capacity: MemoryLayout.size(ofValue: command)) { text in
+            pointer.withMemoryRebound(to: CChar.self, capacity: capacity) { text in
                 String(cString: text)
             }
         }
