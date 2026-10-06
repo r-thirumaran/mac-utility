@@ -1,0 +1,18 @@
+{
+  "_comment": "Reach — native wrapper around the phone web app in apps/reach/ui/static. `npm run sync:www` copies that app (plus shared/ui) into ./www before every `cap sync`; nothing in www/ is edited by hand. server.androidScheme http + cleartext and android.allowMixedContent let the WebView talk plain http:// and ws:// to the agents on the LAN (docs/reach-api.md §1); android:usesCleartextTraffic in AndroidManifest.xml lets the OS network stack allow it. ios.contentInset never: the page handles its own insets with env(safe-area-inset-*).",
+  "appId": "com.thiru.reach",
+  "appName": "Reach",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#f5f5f7"
+  },
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#f5f5f7"
+  }
+}

@@ -9,7 +9,7 @@ understands the Android back button; otherwise it *is* the PWA.
 
 | path | what |
 |---|---|
-| `capacitor.config.ts` | app id `com.thiru.reach`, name *Reach*, `webDir: www`, the http/cleartext settings explained below |
+| `capacitor.config.json` | app id `com.thiru.reach`, name *Reach*, `webDir: www`, the http/cleartext settings explained below |
 | `sync-www.mjs` | builds `www/` (git-ignored) from `../ui/static` and `shared/ui` → `www/shared`; `npm run sync:www` |
 | `android/` | the native Android project (committed; Gradle, AndroidManifest, icons). `npx cap sync android` refreshes its web assets and plugin list |
 | `ios/` | the native Xcode project (committed; Swift Package Manager, no CocoaPods). `npx cap sync ios` likewise |
