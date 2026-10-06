@@ -23,6 +23,9 @@ const waitState = (page, pred, msg, timeout = 20000) =>
     throw new Error(`${msg}: ${e.message}`);
   });
 
+/** Remove transient toasts so screenshots show the page itself. */
+const clearToasts = (page) => page.evaluate(() => document.querySelectorAll('.toast-region .toast').forEach((el) => el.remove()));
+
 /** Drag a layout tile onto a grid cell with real pointer events. */
 async function dragTile(page, id, col, row) {
   const tile = page.locator(`.eh-tile[data-id="${id}"]`).first();
@@ -110,6 +113,7 @@ export default async function (t) {
   const rightId = sR.self.id;
   await t.expect(await L.$eval(`.eh-peer[data-id="${rightId}"] .badge`, (e) => e.textContent), /Online/);
   await t.expect(await L.$$eval(`.eh-peer[data-id="${rightId}"] .eh-display`, (els) => els.length), 2, 'peer card draws the peer’s two displays');
+  await clearToasts(L);
   await t.screenshot(L, 'edgehop-machines');
 
   // ---------------------------------------------------------------- layout
@@ -132,6 +136,7 @@ export default async function (t) {
   await t.expect(await L.$eval('.eh-cell[data-col="3"][data-row="2"] .eh-tile', (e) => e.dataset.id), rightId, 'arrow key moved the tile');
   await L.keyboard.press('ArrowLeft');
   await t.expect(await L.$eval('#layout-save', (b) => b.disabled), true, 'back to the saved layout');
+  await clearToasts(L);
   await t.screenshot(L, 'edgehop-layout');
 
   // ---------------------------------------------------------------- the hop
@@ -203,6 +208,7 @@ export default async function (t) {
   await L.click('#log-panel summary');
   await t.expect(await L.$$eval('#log-list .eh-log-line', (els) => els.length) > 3, true, 'log panel lists entries');
   await t.expect(await L.textContent('#log-list'), /control → Right/, 'hand-over logged');
+  await clearToasts(L);
   await t.screenshot(L, 'edgehop-settings');
 
   // ---------------------------------------------------------------- unpair

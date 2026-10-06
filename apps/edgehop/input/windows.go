@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unicode/utf16"
@@ -267,7 +268,7 @@ type winDevice struct {
 }
 
 var (
-	current *winDevice // the device whose hooks are installed (one per process)
+	current atomic.Pointer[winDevice] // the device whose hooks are installed (one per process)
 
 	callbackOnce sync.Once
 	mouseCb      uintptr
@@ -334,7 +335,7 @@ func (d *winDevice) loop(ready chan<- error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	defer close(d.stopped)
-	current = d
+	current.Store(d)
 	d.threadID = windows.GetCurrentThreadId()
 	d.seedModifiers()
 	hinst, _, _ := procGetModuleHandleW.Call(0)
@@ -375,7 +376,7 @@ func (d *winDevice) loop(ready chan<- error) {
 		d.hwnd = 0
 	}
 	d.showCursor()
-	current = nil
+	current.Store(nil)
 }
 
 // Stop ends the hook thread and restores the cursor.
@@ -546,7 +547,7 @@ func (d *winDevice) deliver(ev Event) bool {
 // mouseProc is the WH_MOUSE_LL procedure. lParam is typed as the struct
 // pointer it is (NewCallback accepts pointer-sized arguments).
 func mouseProc(nCode int32, wParam uintptr, ms *msllhookstruct) uintptr {
-	d := current
+	d := current.Load()
 	if nCode >= 0 && d != nil && ms != nil {
 		injected := ms.Flags&llmhfInjected != 0 || ms.ExtraInfo == magic
 		if swallow := d.mouseEvent(uint32(wParam), ms, injected); swallow {
@@ -662,7 +663,7 @@ func (d *winDevice) recentre() {
 
 // keyboardProc is the WH_KEYBOARD_LL procedure.
 func keyboardProc(nCode int32, wParam uintptr, kb *kbdllhookstruct) uintptr {
-	d := current
+	d := current.Load()
 	if nCode >= 0 && d != nil && kb != nil {
 		injected := kb.Flags&llkhfInjected != 0 || kb.ExtraInfo == magic
 		if swallow := d.keyEvent(uint32(wParam), kb, injected); swallow {
@@ -733,7 +734,7 @@ func createHiddenWindow(hinst uintptr) uintptr {
 
 func wndProc(hwnd uintptr, m uint32, wParam, lParam uintptr) uintptr {
 	if m == wmDisplayChange {
-		if d := current; d != nil {
+		if d := current.Load(); d != nil {
 			d.mu.Lock()
 			fns := append([]func(){}, d.onDispl...)
 			d.mu.Unlock()

@@ -275,8 +275,8 @@ function applyState(st) {
   layoutEditor.setState(st);
   if (st.pairing) pairDialog.update(st.pairing);
   if (app.settings) {
-    app.settings.launchAtLogin = st.launchAtLogin;
-    app.settings.name = st.self.name;
+    // The state carries the settings the backend actually holds; never keep a stale copy.
+    app.settings = { ...app.settings, ...(st.settings || {}), launchAtLogin: st.launchAtLogin, name: st.self.name };
     fillSettings();
   }
   document.title = st.self.active ? 'Edgehop' : `Edgehop — controlling ${activeMachine(st)?.name || ''}`;
