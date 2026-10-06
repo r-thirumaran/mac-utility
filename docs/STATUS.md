@@ -11,7 +11,7 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 | App | What | Mac DMG | Windows exe | Mobile |
 |---|---|---|---|---|
 | Clipwell | window snapping + clipboard history (copied from r-thirumaran/Clipwell) | CI builds DMG (green) | n/a (macOS-only app) | n/a |
-| Vitals | CPU / RAM / GPU / process monitor + power & lid-close settings | not started | not started | n/a |
+| Vitals | CPU / RAM / GPU / process monitor + power & lid-close settings | mac backend in progress (batch 2) | Go backend + UI committed, tests green on Linux | n/a |
 | Edgehop | one mouse + keyboard across Macs and Windows PCs (screen-edge switching) | not started | not started | n/a |
 | Reach | control any laptop from your phone (agent + mobile app) | not started | not started | not started |
 
@@ -32,7 +32,7 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 - [x] shared/go (tray, webview host, bridge, mdns, framing, crypto, http+ws) — tests green on Linux, builds for windows/amd64
 - [x] shared/swift (menubar, WKWebView bridge, mini http+ws server, framing, crypto, admin runner) — type-checks on macos-15; XCTest suites run on macOS + Linux in CI
 - [x] shared/ui (native.js bridge shim, base CSS, charts, components, demo) — Playwright test green
-- [ ] Vitals mac / win / ui — batch 1 agent finishing win backend + ui (partial code committed); mac backend partial (3 samplers), batch 2
+- [ ] Vitals mac / win / ui — win backend + ui DONE (commit 6447c63, Go tests + Playwright green); mac backend agent running (batch 2)
 - [ ] Edgehop core + mac + win + ui — batch 1 agent finishing core/win/ui (core + transport + tests committed); mac in batch 2
 - [ ] Reach agent mac / win + PWA + Capacitor mobile project — batch 1 agent building win agent + PWA; mac in batch 2; Capacitor after the PWA exists
 - [x] Icons for every app (`Tools/make_icons.py` → icns, ico, PWA PNGs)
