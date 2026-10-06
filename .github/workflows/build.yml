@@ -1,20 +1,14 @@
 name: build
 
+# Manual only. Nothing runs on push or tag; start it from the Actions tab if you ever want
+# GitHub to build the artifacts for you. Local builds: `make dmg`, `make windows` (see README).
 on:
-  push:
-    branches: ['**']
-    tags: ['v*']
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
-      - 'releases/**'
-      - 'LICENSE'
   workflow_dispatch:
 
 # A newer push to the same branch cancels the runs still going for older commits.
 concurrency:
   group: build-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  cancel-in-progress: true
 
 permissions:
   contents: write

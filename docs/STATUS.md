@@ -52,6 +52,13 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 3. Batch 3: Reach Capacitor wrapper DONE; next: conformance pass (mac vs win method surfaces); adversarial code review; READMEs; tag v0.1.0 to publish the release with all DMGs/exes/APK.
 Run at most three implementation agents at once: six in parallel exhausted the usage window before any of them finished.
 
+## Build locally (owner's choice: no GitHub Actions)
+The workflow is now manual-only (`workflow_dispatch`); nothing runs on push. Build on the Mac:
+`make dmg` (all four DMGs into dist-out/, needs Xcode Command Line Tools), `make windows`
+(the three exes cross-compiled with Go, no Windows machine needed), and the phone app via
+`cd apps/reach/mobile && npm ci && npm run android` (Android Studio) / `npm run ios` (Xcode).
+The orchestrator Routine has been disabled.
+
 ## Blockers / notes
 - **GitHub Actions is blocked by billing (2026-10-06 04:00 UTC).** Every job of run 37411605784 failed instantly with "The job was not started because recent account payments have failed or your spending limit needs to be increased". The private repo's free Actions allowance is exhausted (macOS runner minutes count 10×; ~54 runs so far). Until the owner raises the spending limit / fixes payment under GitHub ▸ Settings ▸ Billing & plans, or makes the repository public (public repos get free Actions minutes, including macOS), no CI run — and therefore no Swift compile check and no artifacts — can happen. Last fully green states: Linux + Windows jobs fe3600d/989dbc4, all four DMG jobs d98fa5b, Android 989dbc4. Commits 9a8e7b1 (Vitals/Reach Swift review fixes), 23d3a81 (Windows review fixes incl. new live tests for the Windows runner) and the Edgehop Swift review fixes are NOT yet CI-verified. When CI is back: (1) confirm all jobs green on the branch head, (2) fix any compile errors from the three review commits, (3) tag v0.1.0 (`git tag v0.1.0 && git push origin v0.1.0`) so the release job publishes the four DMGs, three exes and the APK, (4) disable the orchestrator Routine. The workflow now skips docs-only pushes, cancels superseded runs and rebuilds each macOS app only when its sources change, so minutes go much further once re-enabled.
 - This build box is Linux: Swift cannot be compiled here (download.swift.org is blocked), so macOS code is verified only by the GitHub Actions macOS runner. Keep pushes small and watch the runs.
