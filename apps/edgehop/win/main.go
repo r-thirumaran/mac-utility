@@ -160,6 +160,9 @@ func run(o options) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 	a.quit = cancel
+	if noUI {
+		go exitWithParent(cancel)
+	}
 
 	if err := a.tr.Start(ctx); err != nil {
 		return err
@@ -207,6 +210,23 @@ func applogOrStderr(dir string, inConfigDir bool) *log.Logger {
 		return log.New(os.Stderr, "", log.LstdFlags)
 	}
 	return l
+}
+
+// exitWithParent cancels the app when the process that started it is gone
+// (--no-ui runs are managed by a test harness or a service wrapper; `go run`
+// does not forward signals to the binary it built).
+func exitWithParent(cancel context.CancelFunc) {
+	parent := os.Getppid()
+	if parent <= 1 {
+		return
+	}
+	for {
+		time.Sleep(time.Second)
+		if os.Getppid() != parent {
+			cancel()
+			return
+		}
+	}
 }
 
 // parseFakeDisplays parses "WxH[+X+Y][@scale][*]" entries separated by ';'
