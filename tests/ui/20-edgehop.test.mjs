@@ -18,7 +18,10 @@ const rpc = (page, method, params = {}) => page.evaluate(async ([m, p]) => {
 
 const state = (page) => page.evaluate(() => window.__edgehop.state);
 const waitState = (page, pred, msg, timeout = 20000) =>
-  page.waitForFunction(pred, null, { timeout }).catch((e) => { throw new Error(`${msg}: ${e.message}`); });
+  page.waitForFunction(pred, null, { timeout }).catch(async (e) => {
+    await page.screenshot({ path: resolve(here, '..', '..', 'test-results', 'edgehop-failure.png') }).catch(() => {});
+    throw new Error(`${msg}: ${e.message}`);
+  });
 
 /** Drag a layout tile onto a grid cell with real pointer events. */
 async function dragTile(page, id, col, row) {
