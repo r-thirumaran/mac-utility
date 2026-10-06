@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Edgehop</title>
+  <link rel="icon" href="./icon-192.png">
+  <link rel="stylesheet" href="./shared/base.css">
+  <link rel="stylesheet" href="./app.css">
+</head>
+<body>
+<header class="toolbar eh-toolbar">
+  <div class="toolbar-title row gap-2">
+    <svg class="eh-logo" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="2" y="5" width="9" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="13" y="5" width="9" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 11h8m-3-3 3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Edgehop</span>
+  </div>
+  <div class="tabs is-pills eh-nav" id="nav" aria-label="Pages">
+    <button class="tab" data-tab="machines" data-panel="page-machines" aria-selected="true">Machines</button>
+    <button class="tab" data-tab="layout" data-panel="page-layout">Layout</button>
+    <button class="tab" data-tab="settings" data-panel="page-settings">Settings</button>
+  </div>
+  <div class="eh-status ml-auto" id="status-strip" aria-live="polite"></div>
+</header>
+
+<main class="page stack gap-4 eh-page">
+  <section class="tab-panel stack gap-4" id="page-machines" aria-label="Machines"></section>
+  <section class="tab-panel stack gap-4" id="page-layout" aria-label="Layout" hidden></section>
+  <section class="tab-panel stack gap-4" id="page-settings" aria-label="Settings" hidden></section>
+
+  <details class="card is-flush eh-log" id="log-panel">
+    <summary class="eh-log-summary">
+      <span class="row gap-2"><span class="eh-log-chevron" aria-hidden="true"></span><span class="weight-500">Log</span><span class="badge" id="log-count">0</span></span>
+      <button class="btn btn-ghost btn-sm" id="log-clear" type="button">Clear</button>
+    </summary>
+    <div class="eh-log-list" id="log-list" role="log" aria-live="off"></div>
+  </details>
+</main>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
