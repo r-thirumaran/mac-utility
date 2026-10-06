@@ -112,7 +112,7 @@ final class VitalsBridge {
         bridge.register("vitals.killProcess") { params in
             let pid = (params["pid"] as? NSNumber)?.intValue ?? 0
             let force = params["force"] as? Bool ?? false
-            guard pid > 0 else { throw BridgeError.invalidParams("pid must be positive") }
+            guard pid > 0, pid <= Int(Int32.max) else { throw BridgeError.invalidParams("pid must be positive") }
             guard kill(pid_t(pid), force ? SIGKILL : SIGTERM) == 0 else {
                 let code = errno
                 Log.error("kill \(pid): \(String(cString: strerror(code)))", category: "processes")

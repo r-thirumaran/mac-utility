@@ -286,9 +286,11 @@ final class PowerSettings {
     }
 
     /// `FAIL <tag>: <first line of pmset's message>` lines of the apply script.
+    // Reviewer note: `do shell script` rewrites the output's line endings to CR by default
+    // ("altering line endings"), so split on every newline character, not just LF.
     private static func parseFailures(_ output: String) -> [String: String] {
         var failures: [String: String] = [:]
-        for line in output.components(separatedBy: "\n") where line.hasPrefix("FAIL ") {
+        for line in output.components(separatedBy: CharacterSet.newlines) where line.hasPrefix("FAIL ") {
             let body = line.dropFirst(5)
             guard let separator = body.range(of: ": ") else {
                 failures[String(body).trimmingCharacters(in: .whitespaces)] = "pmset failed"

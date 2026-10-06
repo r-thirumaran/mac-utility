@@ -87,7 +87,7 @@ final class KeyTable {
         var table: [String: Int] = [:]
         for row in rows {
             guard let dom = row["dom"] as? String, !dom.isEmpty,
-                  let mac = (row["mac"] as? NSNumber)?.intValue, mac >= 0 else { continue }
+                  let mac = (row["mac"] as? NSNumber)?.intValue, mac >= 0, mac <= Int(UInt16.max) else { continue }
             if table[dom] == nil {
                 table[dom] = mac
             }

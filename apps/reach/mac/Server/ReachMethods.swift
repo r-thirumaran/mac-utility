@@ -115,10 +115,11 @@ final class ReachMethods {
             guard count == 1 || count == 2 else {
                 throw ReachError.invalidParams("count must be 1 or 2")
             }
+            var target: CGPoint?
             if let x = ReachMethods.number(params, "x"), let y = ReachMethods.number(params, "y") {
-                try input.moveTo(display: ReachMethods.int(params, "display") ?? 0, x: x, y: y)
+                target = try input.moveTo(display: ReachMethods.int(params, "display") ?? 0, x: x, y: y)
             }
-            try input.click(button: button, count: count)
+            try input.click(button: button, count: count, at: target)
             completion(.success(ReachMethods.empty))
         case "mouse.down", "mouse.up":
             try input.button(ReachMethods.string(params, "button") ?? "left", down: method == "mouse.down")
@@ -185,7 +186,7 @@ final class ReachMethods {
             completion(.success(ReachMethods.empty))
         case "apps.quit":
             let pid = ReachMethods.int(params, "pid") ?? 0
-            guard pid > 0 else { throw ReachError.invalidParams("pid is required") }
+            guard pid > 0, pid <= Int(Int32.max) else { throw ReachError.invalidParams("pid is required") }
             try apps.quit(pid: pid, force: ReachMethods.bool(params, "force") ?? false)
             completion(.success(ReachMethods.empty))
         case "windows.list":

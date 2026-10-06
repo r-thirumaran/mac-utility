@@ -8,6 +8,11 @@ import Foundation
 /// by the source rather than queued, and a frame is never handed to the socket while the
 /// previous one is still being built. A slow capture therefore lowers the rate instead of
 /// piling frames up. Five consecutive capture failures end the stream, like the Go agent.
+///
+/// REVIEW: unlike the Go agent (whose send blocks), `socket.send(binary:)` only enqueues on the
+/// NWConnection, so a phone that stops reading lets frames pile up in the connection's send
+/// buffer (~0.5–1 MB/s) until the socket dies. Bounding that needs a send-completion hook on
+/// the shared `WebSocketConnection`; left as is because it cannot crash and frees on close.
 final class ScreenStreamer {
 
     static let maxFailures = 5

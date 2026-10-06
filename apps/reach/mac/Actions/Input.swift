@@ -40,11 +40,21 @@ final class InputInjector {
 
     // MARK: - Mouse
 
+    /// Largest delta accepted per `mouse.move` / `mouse.scroll` call, in pixels.
+    // Reviewer note: the deltas come straight from JSON; `Int64(deltaX)` below traps for values
+    // outside Int64 (and a huge value would push the remainder to inf/NaN), so clamp first.
+    private static let maxDelta = 10_000.0
+
+    private static func boundedDelta(_ value: Double) -> Double {
+        guard value.isFinite else { return 0 }
+        return min(max(value, -maxDelta), maxDelta)
+    }
+
     /// `mouse.move {dx, dy}` in pixels.
     func move(dx: Double, dy: Double) throws {
         try InputInjector.ensureAccessibility()
-        remainderX += dx
-        remainderY += dy
+        remainderX += InputInjector.boundedDelta(dx)
+        remainderY += InputInjector.boundedDelta(dy)
         let stepX = remainderX.rounded(.towardZero)
         let stepY = remainderY.rounded(.towardZero)
         remainderX -= stepX
@@ -55,23 +65,30 @@ final class InputInjector {
         postMove(to: target, deltaX: stepX, deltaY: stepY)
     }
 
-    /// `mouse.moveTo {display, x, y}` with fractions of that display.
-    func moveTo(display: Int, x: Double, y: Double) throws {
+    /// `mouse.moveTo {display, x, y}` with fractions of that display. Returns the global
+    /// point the pointer was sent to.
+    @discardableResult
+    func moveTo(display: Int, x: Double, y: Double) throws -> CGPoint {
         try InputInjector.ensureAccessibility()
         let target = try ScreenCapture.display(at: display)
         let fx = min(max(x, 0), 1)
         let fy = min(max(y, 0), 1)
         let point = CGPoint(x: target.bounds.minX + fx * max(0, target.bounds.width - 1),
                             y: target.bounds.minY + fy * max(0, target.bounds.height - 1))
-        postMove(to: clamp(point), deltaX: 0, deltaY: 0)
+        let destination = clamp(point)
+        postMove(to: destination, deltaX: 0, deltaY: 0)
+        return destination
     }
 
-    /// `mouse.click {button, count}` at the current position. A double click is two
-    /// down/up pairs with click states 1 and 2, which is what AppKit expects.
-    func click(button name: String, count: Int) throws {
+    /// `mouse.click {button, count}` at `point`, or at the current position when `nil`. A
+    /// double click is two down/up pairs with click states 1 and 2, which is what AppKit expects.
+    // Reviewer note: the HID tap processes a posted move asynchronously, so reading the cursor
+    // position straight after `moveTo` can still return the old location; `mouse.click {x, y}`
+    // therefore passes the point it just moved to.
+    func click(button name: String, count: Int, at point: CGPoint? = nil) throws {
         try InputInjector.ensureAccessibility()
         let button = try InputInjector.mouseButton(name)
-        let location = currentLocation()
+        let location = point ?? currentLocation()
         for state in 1...max(1, count) {
             post(type: button.down, at: location, button: button.button, clickState: state)
             post(type: button.up, at: location, button: button.button, clickState: state)
@@ -95,8 +112,8 @@ final class InputInjector {
     /// scroll towards the top, so both axes are negated. Sub-pixel remainders accumulate.
     func scroll(dx: Double, dy: Double) throws {
         try InputInjector.ensureAccessibility()
-        scrollRemainderX += dx
-        scrollRemainderY += dy
+        scrollRemainderX += InputInjector.boundedDelta(dx)
+        scrollRemainderY += InputInjector.boundedDelta(dy)
         let stepX = scrollRemainderX.rounded(.towardZero)
         let stepY = scrollRemainderY.rounded(.towardZero)
         scrollRemainderX -= stepX

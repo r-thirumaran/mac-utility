@@ -5,8 +5,8 @@ import Darwin
 /// user, nothing needs root.
 ///
 /// Lock tries `SACLockScreenImmediate` from the private login framework (resolved with
-/// `dlsym`, skipped when absent; what the Keychain menu's "Lock Screen" used), then
-/// `CGSession -suspend`, then a synthetic ⌃⌘Q (needs Accessibility). Sleep and display-off
+/// `dlsym`, skipped when absent; what the Keychain menu's "Lock Screen" used), then a
+/// synthetic ⌃⌘Q (needs Accessibility), then the legacy `CGSession -suspend`. Sleep and display-off
 /// are `pmset sleepnow` / `pmset displaysleepnow`, which the console user may run. Restart
 /// and shut down ask System Events, the same Apple events the  menu sends; the first use
 /// shows the Automation consent prompt and a denial is reported as `needs_permission`.
@@ -59,8 +59,8 @@ enum PowerControl {
     @MainActor
     private static func lock() -> Error? {
         if lockViaLoginFramework() { return nil }
-        if lockViaCGSession() { return nil }
         if Permissions.accessibilityGranted, postControlCommandQ() { return nil }
+        if lockViaCGSession() { return nil }
         return ReachError.needsPermission("accessibility",
             "Locking the screen needs Accessibility access for Reach (System Settings ▸ Privacy & Security ▸ Accessibility).")
     }
