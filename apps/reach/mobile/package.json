@@ -1,0 +1,24 @@
+{
+  "name": "reach-mobile",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Capacitor wrapper that ships the Reach phone web app (apps/reach/ui/static) as native Android and iOS apps.",
+  "type": "module",
+  "scripts": {
+    "sync:www": "node sync-www.mjs",
+    "android": "npm run sync:www && npx cap sync android",
+    "ios": "npm run sync:www && npx cap sync ios",
+    "open:android": "npx cap open android",
+    "open:ios": "npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.2",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/haptics": "8.0.2",
+    "@capacitor/ios": "8.5.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.2"
+  }
+}
