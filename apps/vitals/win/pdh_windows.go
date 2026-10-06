@@ -38,8 +38,12 @@ const (
 	pdhInvalidData        = 0xC0000BC6
 )
 
-// pdhError is a PDH_STATUS other than success.
+// pdhError is a PDH_STATUS other than success. PDH_STATUS is a 32-bit
+// LONG: only the low half of the return register is defined, so every
+// status is read through status() before it is compared.
 type pdhError uint32
+
+func status(r uintptr) uint32 { return uint32(r) }
 
 func (e pdhError) Error() string { return fmt.Sprintf("pdh: status 0x%08X", uint32(e)) }
 
@@ -71,8 +75,8 @@ type pdhQuery struct {
 
 func openPdhQuery() (*pdhQuery, error) {
 	var h uintptr
-	if r, _, _ := procPdhOpenQuery.Call(0, 0, uintptr(unsafe.Pointer(&h))); r != 0 {
-		return nil, pdhError(r)
+	if r, _, _ := procPdhOpenQuery.Call(0, 0, uintptr(unsafe.Pointer(&h))); status(r) != 0 {
+		return nil, pdhError(status(r))
 	}
 	return &pdhQuery{h: h}, nil
 }
@@ -91,16 +95,16 @@ func (q *pdhQuery) AddEnglishCounter(path string) (uintptr, error) {
 		return 0, err
 	}
 	var c uintptr
-	if r, _, _ := procPdhAddEnglishCounterW.Call(q.h, uintptr(unsafe.Pointer(p)), 0, uintptr(unsafe.Pointer(&c))); r != 0 {
-		return 0, pdhError(r)
+	if r, _, _ := procPdhAddEnglishCounterW.Call(q.h, uintptr(unsafe.Pointer(p)), 0, uintptr(unsafe.Pointer(&c))); status(r) != 0 {
+		return 0, pdhError(status(r))
 	}
 	return c, nil
 }
 
 // Collect takes one sample for every counter of the query.
 func (q *pdhQuery) Collect() error {
-	if r, _, _ := procPdhCollectQueryData.Call(q.h); r != 0 {
-		return pdhError(r)
+	if r, _, _ := procPdhCollectQueryData.Call(q.h); status(r) != 0 {
+		return pdhError(status(r))
 	}
 	return nil
 }
@@ -110,14 +114,16 @@ func formattedArray(counter uintptr) ([]pdhItem, error) {
 	var size, count uint32
 	var buf []byte
 	r, _, _ := procPdhGetFormattedCounterArrayW.Call(counter, pdhFmtDouble, uintptr(unsafe.Pointer(&size)), uintptr(unsafe.Pointer(&count)), 0)
-	for i := 0; r == pdhMoreData && i < 4; i++ { // instances may appear between the two calls
+	st := status(r)
+	for i := 0; st == pdhMoreData && size > 0 && i < 4; i++ { // instances may appear between the two calls
 		buf = make([]byte, size)
 		r, _, _ = procPdhGetFormattedCounterArrayW.Call(counter, pdhFmtDouble, uintptr(unsafe.Pointer(&size)), uintptr(unsafe.Pointer(&count)), uintptr(unsafe.Pointer(&buf[0])))
+		st = status(r)
 	}
-	if r != 0 {
-		return nil, pdhError(r)
+	if st != 0 {
+		return nil, pdhError(st)
 	}
-	if count == 0 || len(buf) == 0 {
+	if count == 0 || len(buf) < int(count)*int(unsafe.Sizeof(pdhFmtCounterValueItemDouble{})) {
 		return nil, nil
 	}
 	items := unsafe.Slice((*pdhFmtCounterValueItemDouble)(unsafe.Pointer(&buf[0])), count)
@@ -135,8 +141,8 @@ func formattedArray(counter uintptr) ([]pdhItem, error) {
 // formattedValue reads a single-instance counter.
 func formattedValue(counter uintptr) (float64, error) {
 	var v pdhFmtCounterValueDouble
-	if r, _, _ := procPdhGetFormattedCounterValue.Call(counter, pdhFmtDouble, 0, uintptr(unsafe.Pointer(&v))); r != 0 {
-		return 0, pdhError(r)
+	if r, _, _ := procPdhGetFormattedCounterValue.Call(counter, pdhFmtDouble, 0, uintptr(unsafe.Pointer(&v))); status(r) != 0 {
+		return 0, pdhError(status(r))
 	}
 	if v.CStatus != pdhCStatusValidData && v.CStatus != pdhCStatusNewData {
 		return 0, pdhError(v.CStatus)

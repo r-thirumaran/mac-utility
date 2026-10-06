@@ -127,9 +127,12 @@ func OpenURL(url string) error {
 }
 
 // RunHidden runs a console program (powercfg, powershell …) without flashing
-// a console window and returns its combined output.
+// a console window and returns its combined output. The apps are GUI
+// subsystem executables, so a console child would otherwise get a brand new
+// console window: CREATE_NO_WINDOW gives it none (output still arrives
+// through the pipes) and HideWindow covers tools that create their own.
 func RunHidden(name string, args ...string) ([]byte, error) {
 	cmd := exec.Command(name, args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
 	return cmd.CombinedOutput()
 }

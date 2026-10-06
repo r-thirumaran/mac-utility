@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
+	"github.com/r-thirumaran/mac-utility/shared/go/winutil"
 	"github.com/r-thirumaran/mac-utility/shared/keymap"
 )
 
@@ -288,11 +289,11 @@ func newWinDevice() *winDevice {
 	if ms, _, _ := procGetDoubleClickTime.Call(); ms > 0 {
 		d.dblTime = time.Duration(ms) * time.Millisecond
 	}
-	if x, _, _ := procGetSystemMetrics.Call(smCxDoubleClk); x > 0 {
-		d.dblX = int32(x)
+	if x := systemMetric(smCxDoubleClk); x > 0 {
+		d.dblX = x
 	}
-	if y, _, _ := procGetSystemMetrics.Call(smCyDoubleClk); y > 0 {
-		d.dblY = int32(y)
+	if y := systemMetric(smCyDoubleClk); y > 0 {
+		d.dblY = y
 	}
 	return d
 }
@@ -350,6 +351,12 @@ func (d *winDevice) loop(ready chan<- error) {
 			for _, hh := range d.hooks[:i] {
 				_, _, _ = procUnhookWindowsHookEx.Call(hh)
 			}
+			d.hooks = [2]uintptr{}
+			if d.hwnd != 0 {
+				_, _, _ = procDestroyWindow.Call(d.hwnd)
+				d.hwnd = 0
+			}
+			current.Store(nil)
 			ready <- fmt.Errorf("input: SetWindowsHookEx(%d): %w", id, err)
 			return
 		}
@@ -447,10 +454,10 @@ func (d *winDevice) hideCursor() {
 	}
 	d.hidden = true
 	d.mu.Unlock()
-	w, _, _ := procGetSystemMetrics.Call(smCxCursor)
-	h, _, _ := procGetSystemMetrics.Call(smCyCursor)
-	if w == 0 || h == 0 {
-		w, h = 32, 32
+	w := uintptr(int32(systemMetric(smCxCursor)))
+	h := uintptr(int32(systemMetric(smCyCursor)))
+	if int32(w) <= 0 || int32(h) <= 0 || w%16 != 0 {
+		w, h = 32, 32 // the mask rows below are packed, which needs a WORD-aligned width
 	}
 	n := int(w) * int(h) / 8
 	and := make([]byte, n)
@@ -497,11 +504,8 @@ func (d *winDevice) Displays() []Display {
 	_, _, _ = procEnumDisplayMonitors.Call(0, 0, enumCb, 0)
 	out := append([]Display(nil), enumList...)
 	if len(out) == 0 {
-		x, _, _ := procGetSystemMetrics.Call(smXVirtualScreen)
-		y, _, _ := procGetSystemMetrics.Call(smYVirtualScreen)
-		w, _, _ := procGetSystemMetrics.Call(smCxVirtualScreen)
-		h, _, _ := procGetSystemMetrics.Call(smCyVirtualScreen)
-		out = []Display{{ID: "virtual", X: int(int32(x)), Y: int(int32(y)), W: int(int32(w)), H: int(int32(h)), Scale: 1, Primary: true}}
+		x, y, w, h := virtualScreen()
+		out = []Display{{ID: "virtual", X: int(x), Y: int(y), W: int(w), H: int(h), Scale: 1, Primary: true}}
 	}
 	return out
 }
@@ -757,29 +761,30 @@ func sendInput(recs []inputRecord) {
 	_, _, _ = procSendInput.Call(uintptr(len(recs)), uintptr(unsafe.Pointer(&recs[0])), unsafe.Sizeof(recs[0]))
 }
 
+// systemMetric reads one GetSystemMetrics value (an int, so only the low
+// 32 bits of the return register are meaningful).
+func systemMetric(index uintptr) int32 {
+	r, _, _ := procGetSystemMetrics.Call(index)
+	return int32(r)
+}
+
 // virtualScreen returns the virtual desktop rectangle.
 func virtualScreen() (x, y, w, h int32) {
-	rx, _, _ := procGetSystemMetrics.Call(smXVirtualScreen)
-	ry, _, _ := procGetSystemMetrics.Call(smYVirtualScreen)
-	rw, _, _ := procGetSystemMetrics.Call(smCxVirtualScreen)
-	rh, _, _ := procGetSystemMetrics.Call(smCyVirtualScreen)
-	return int32(rx), int32(ry), int32(rw), int32(rh)
+	return systemMetric(smXVirtualScreen), systemMetric(smYVirtualScreen), systemMetric(smCxVirtualScreen), systemMetric(smCyVirtualScreen)
 }
 
 // MoveTo warps the cursor with an absolute, virtual-desktop SendInput
-// (immune to pointer acceleration). Normalisation per Chromium's
-// event_creation_utils: ((x − left) * 65536) / width + 65536 / (2 * width).
+// (immune to pointer acceleration); winutil.AbsoluteCoordinate does the
+// 0..65535 normalisation so the pixel is hit exactly.
 func (d *winDevice) MoveTo(x, y int) {
 	vx, vy, vw, vh := virtualScreen()
 	if vw <= 0 || vh <= 0 {
 		return
 	}
-	nx := (int64(int32(x)-vx)*65536)/int64(vw) + 65536/(2*int64(vw))
-	ny := (int64(int32(y)-vy)*65536)/int64(vh) + 65536/(2*int64(vh))
-	nx = min(max(nx, 0), 65535)
-	ny = min(max(ny, 0), 65535)
+	nx := winutil.AbsoluteCoordinate(x, int(vx), int(vw))
+	ny := winutil.AbsoluteCoordinate(y, int(vy), int(vh))
 	rec := inputRecord{Type: inputMouse}
-	rec.Mi = mouseInput{Dx: int32(nx), Dy: int32(ny), Flags: mouseeventfMove | mouseeventfAbsolute | mouseeventfVirtualDesk, ExtraInfo: magic}
+	rec.Mi = mouseInput{Dx: nx, Dy: ny, Flags: mouseeventfMove | mouseeventfAbsolute | mouseeventfVirtualDesk, ExtraInfo: magic}
 	sendInput([]inputRecord{rec})
 }
 

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -316,8 +317,11 @@ func (s *windowsStats) readGPU() []GPUSample {
 		return []GPUSample{}
 	}
 	items, err := formattedArray(s.cGPUEngine)
-	if err != nil && !err.(pdhError).noData() {
-		return []GPUSample{}
+	if err != nil {
+		var pe pdhError
+		if !errors.As(err, &pe) || !pe.noData() {
+			return []GPUSample{}
+		}
 	}
 	u := aggregateGPU(items)
 	dedicated := map[string]uint64{}
@@ -389,13 +393,16 @@ func (s *windowsStats) readGPU() []GPUSample {
 // against the previous walk keyed by (PID, CreateTime).
 func (s *windowsStats) Processes() ([]Process, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if len(s.procPrev) == 0 || time.Since(s.procAt) > 15*time.Second {
-		if _, err := s.scanProcesses(); err != nil {
+		_, err := s.scanProcesses()
+		s.mu.Unlock() // the sampler must not wait on the baseline interval
+		if err != nil {
 			return nil, err
 		}
 		time.Sleep(250 * time.Millisecond)
+		s.mu.Lock()
 	}
+	defer s.mu.Unlock()
 	return s.scanProcesses()
 }
 

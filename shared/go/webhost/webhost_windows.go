@@ -18,11 +18,15 @@ import (
 )
 
 var (
-	user32                  = windows.NewLazySystemDLL("user32.dll")
-	procLoadImageW          = user32.NewProc("LoadImageW")
-	procSendMessageW        = user32.NewProc("SendMessageW")
-	procShowWindow          = user32.NewProc("ShowWindow")
-	procSetForegroundWindow = user32.NewProc("SetForegroundWindow")
+	user32                            = windows.NewLazySystemDLL("user32.dll")
+	procLoadImageW                    = user32.NewProc("LoadImageW")
+	procSendMessageW                  = user32.NewProc("SendMessageW")
+	procShowWindow                    = user32.NewProc("ShowWindow")
+	procSetForegroundWindow           = user32.NewProc("SetForegroundWindow")
+	procSetProcessDpiAwarenessContext = user32.NewProc("SetProcessDpiAwarenessContext")
+	procSetProcessDPIAware            = user32.NewProc("SetProcessDPIAware")
+	procGetDpiForSystem               = user32.NewProc("GetDpiForSystem")
+	procGetSystemMetrics              = user32.NewProc("GetSystemMetrics")
 )
 
 const (
@@ -33,9 +37,53 @@ const (
 	iconSmall        = 0
 	iconBig          = 1
 	swRestore        = 9
+	smCxScreen       = 0
+	smCyScreen       = 1
 	defaultWinWidth  = 1000
 	defaultWinHeight = 700
 )
+
+// setDPIAware opts the process into per-monitor DPI awareness (v2) before
+// the tray and the window exist. Without it Windows renders the WebView2
+// page at 96 dpi and bitmap-stretches it on every display scaled above
+// 100 % (most laptops), which looks blurry. Apps that already set it
+// (Edgehop, Reach) make this a no-op; the pseudo handle -4 is
+// DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2.
+func setDPIAware() {
+	if procSetProcessDpiAwarenessContext.Find() == nil {
+		if r, _, _ := procSetProcessDpiAwarenessContext.Call(^uintptr(3)); r != 0 {
+			return
+		}
+	}
+	_, _, _ = procSetProcessDPIAware.Call()
+}
+
+// windowSize converts the logical (96 dpi) size the app asked for to the
+// physical pixels a DPI-aware window needs on the primary display, and
+// keeps it inside that display so go-webview2's centring never places the
+// window off-screen.
+func windowSize(width, height int) (int, int) {
+	if width <= 0 {
+		width = defaultWinWidth
+	}
+	if height <= 0 {
+		height = defaultWinHeight
+	}
+	dpi := 96
+	if procGetDpiForSystem.Find() == nil {
+		if r, _, _ := procGetDpiForSystem.Call(); uint32(r) > 0 {
+			dpi = int(uint32(r))
+		}
+	}
+	width, height = width*dpi/96, height*dpi/96
+	if r, _, _ := procGetSystemMetrics.Call(smCxScreen); int32(r) > 0 && width > int(int32(r)) {
+		width = int(int32(r))
+	}
+	if r, _, _ := procGetSystemMetrics.Call(smCyScreen); int32(r) > 0 && height > int(int32(r)) {
+		height = int(int32(r))
+	}
+	return width, height
+}
 
 // window owns the WebView2 window. It lives on a dedicated locked OS thread
 // (loop) because the Win32 message pump must run where the window was
@@ -51,6 +99,7 @@ type window struct {
 }
 
 func newWindow(ctx context.Context, c Config, url string) *window {
+	setDPIAware() // before the tray (main thread) or this window exists
 	w := &window{c: c, url: url, openCh: make(chan struct{}, 1)}
 	go w.loop(ctx)
 	return w
@@ -109,13 +158,7 @@ func (w *window) show(ctx context.Context) {
 		_ = winutil.OpenURL(w.url)
 		return
 	}
-	width, height := w.c.Width, w.c.Height
-	if width <= 0 {
-		width = defaultWinWidth
-	}
-	if height <= 0 {
-		height = defaultWinHeight
-	}
+	width, height := windowSize(w.c.Width, w.c.Height)
 	dataPath := dataDir(w.c.Title)
 	wv := webview2.NewWithOptions(webview2.WebViewOptions{
 		DataPath:  dataPath,

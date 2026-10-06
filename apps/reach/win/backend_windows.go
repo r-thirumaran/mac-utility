@@ -3,9 +3,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/user"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
@@ -29,7 +31,7 @@ var (
 	procGlobalUnlock     = kernel32.NewProc("GlobalUnlock")
 	procGlobalSize       = kernel32.NewProc("GlobalSize")
 	procLockWorkStation  = user32.NewProc("LockWorkStation")
-	procSendMessageW     = user32.NewProc("SendMessageW")
+	procSendMessageTOW   = user32.NewProc("SendMessageTimeoutW")
 	procOpenClipboard    = user32.NewProc("OpenClipboard")
 	procCloseClipboard   = user32.NewProc("CloseClipboard")
 	procEmptyClipboard   = user32.NewProc("EmptyClipboard")
@@ -39,14 +41,15 @@ var (
 )
 
 const (
-	hwndBroadcast  = 0xFFFF
-	wmSysCommand   = 0x0112
-	scMonitorPower = 0xF170
-	monitorOff     = 2
-	cfUnicodeText  = 13
-	gmemMoveable   = 0x0002
-	autostartName  = "Reach"
-	maxClipboard   = 4 << 20
+	hwndBroadcast   = 0xFFFF
+	wmSysCommand    = 0x0112
+	scMonitorPower  = 0xF170
+	monitorOff      = 2
+	smtoAbortIfHung = 0x0002
+	cfUnicodeText   = 13
+	gmemMoveable    = 0x0002
+	autostartName   = "Reach"
+	maxClipboard    = 4 << 20
 )
 
 // winBackend is the real backend: SendInput injection (input_windows.go),
@@ -94,21 +97,64 @@ func (w *winBackend) Power(action string) error {
 			return fmt.Errorf("LockWorkStation: %v", e)
 		}
 	case "sleep":
-		go procSetSuspendState.Call(0, 0, 0)
+		go suspend()
 	case "displayOff":
-		go procSendMessageW.Call(hwndBroadcast, wmSysCommand, scMonitorPower, monitorOff)
+		go displayOff()
 	case "restart":
-		if out, err := winutil.RunHidden("shutdown", "/r", "/t", "0"); err != nil {
+		if out, err := winutil.RunHidden(systemTool("shutdown.exe"), "/r", "/t", "0"); err != nil {
 			return fmt.Errorf("shutdown /r: %v: %s", err, out)
 		}
 	case "shutdown":
-		if out, err := winutil.RunHidden("shutdown", "/s", "/t", "0"); err != nil {
+		if out, err := winutil.RunHidden(systemTool("shutdown.exe"), "/s", "/t", "0"); err != nil {
 			return fmt.Errorf("shutdown /s: %v: %s", err, out)
 		}
 	default:
 		return bridge.Errorf(bridge.CodeInvalidParams, "unknown power action %q", action)
 	}
 	return nil
+}
+
+// systemTool is the full path of a System32 program (no PATH lookup).
+func systemTool(name string) string {
+	dir, err := windows.GetSystemDirectory()
+	if err != nil || dir == "" {
+		dir = `C:\Windows\System32`
+	}
+	return filepath.Join(dir, name)
+}
+
+// suspend puts the machine to sleep: SetSuspendState needs SeShutdownPrivilege
+// enabled in the token (interactive users hold it disabled) and returns a
+// BOOLEAN, of which only the low byte is defined. Modern Standby machines
+// report ERROR_NOT_SUPPORTED; there, turning the display off is the sleep
+// entry (docs/research/windows-power-management.md §6).
+func suspend() {
+	_ = enableShutdownPrivilege()
+	r, _, e := procSetSuspendState.Call(0, 0, 0)
+	if byte(r) == 0 && errors.Is(e, windows.ERROR_NOT_SUPPORTED) {
+		displayOff()
+	}
+}
+
+// displayOff broadcasts SC_MONITORPOWER with a timeout so a hung window
+// cannot stall the call.
+func displayOff() {
+	_, _, _ = procSendMessageTOW.Call(hwndBroadcast, wmSysCommand, scMonitorPower, monitorOff, smtoAbortIfHung, 1000, 0)
+}
+
+func enableShutdownPrivilege() error {
+	var tok windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_ADJUST_PRIVILEGES|windows.TOKEN_QUERY, &tok); err != nil {
+		return err
+	}
+	defer tok.Close()
+	name, _ := windows.UTF16PtrFromString("SeShutdownPrivilege")
+	tp := windows.Tokenprivileges{PrivilegeCount: 1}
+	if err := windows.LookupPrivilegeValue(nil, name, &tp.Privileges[0].Luid); err != nil {
+		return err
+	}
+	tp.Privileges[0].Attributes = windows.SE_PRIVILEGE_ENABLED
+	return windows.AdjustTokenPrivileges(tok, false, &tp, 0, nil, nil)
 }
 
 // openClipboard retries briefly because another app may hold the clipboard.

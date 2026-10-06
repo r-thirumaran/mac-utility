@@ -31,6 +31,27 @@ func TestWin32Layouts(t *testing.T) {
 		if s := unsafe.Sizeof(wndClassExW{}); s != 80 {
 			t.Fatalf("sizeof WNDCLASSEXW = %d, want 80", s)
 		}
+		if s := unsafe.Sizeof(msg{}); s != 48 {
+			t.Fatalf("sizeof MSG = %d, want 48", s)
+		}
+		if o := unsafe.Offsetof(msllhookstruct{}.ExtraInfo); o != 24 {
+			t.Fatalf("MSLLHOOKSTRUCT.dwExtraInfo offset = %d, want 24", o)
+		}
+		if o := unsafe.Offsetof(keybdInput{}.ExtraInfo); o != 16 {
+			t.Fatalf("KEYBDINPUT.dwExtraInfo offset = %d, want 16", o)
+		}
+	}
+	if s := unsafe.Sizeof(point{}); s != 8 {
+		t.Fatalf("sizeof POINT = %d, want 8", s)
+	}
+	if s := unsafe.Sizeof(rect{}); s != 16 {
+		t.Fatalf("sizeof RECT = %d, want 16", s)
+	}
+	var r inputRecord
+	r.Type = inputKeyboard
+	r.ki().Scan, r.ki().Flags = 0x1c, keyeventfScanCode
+	if r.Mi.Dx != int32(0x1c<<16) { // wVk at +8, wScan at +10 share Dx
+		t.Fatalf("KEYBDINPUT.wScan does not overlay MOUSEINPUT.dx: %#x", r.Mi.Dx)
 	}
 	if s := unsafe.Sizeof(monitorInfoExW{}); s != 104 {
 		t.Fatalf("sizeof MONITORINFOEXW = %d, want 104", s)

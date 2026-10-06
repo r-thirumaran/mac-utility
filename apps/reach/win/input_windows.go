@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/r-thirumaran/mac-utility/shared/go/bridge"
+	"github.com/r-thirumaran/mac-utility/shared/go/winutil"
 )
 
 // Reach's own SendInput-only injector (no hooks, no shared input package).
@@ -135,17 +136,17 @@ func (in *injector) MouseMove(dx, dy float64) error {
 	return sendInputs([]input{mouseEvent(mouseEventfMove, int32(ix), int32(iy), 0)})
 }
 
-// moveToPixel moves the pointer to an absolute virtual-desktop pixel.
+// moveToPixel moves the pointer to an absolute virtual-desktop pixel
+// (winutil.AbsoluteCoordinate does the 0..65535 normalisation; the naive
+// p*65535/(w-1) lands one pixel short near the origin).
 func moveToPixel(px, py float64) error {
 	vx, vy, vw, vh := virtualScreen()
-	if vw <= 1 || vh <= 1 {
+	if vw <= 0 || vh <= 0 {
 		return fmt.Errorf("no virtual screen")
 	}
-	ax := (px - float64(vx)) * 65535 / float64(vw-1)
-	ay := (py - float64(vy)) * 65535 / float64(vh-1)
-	ax = math.Round(clampF(ax, 0, 65535))
-	ay = math.Round(clampF(ay, 0, 65535))
-	return sendInputs([]input{mouseEvent(mouseEventfMove|mouseEventfAbsolute|mouseEventfVirtualDesk, int32(ax), int32(ay), 0)})
+	ax := winutil.AbsoluteCoordinate(int(math.Round(px)), int(vx), int(vw))
+	ay := winutil.AbsoluteCoordinate(int(math.Round(py)), int(vy), int(vh))
+	return sendInputs([]input{mouseEvent(mouseEventfMove|mouseEventfAbsolute|mouseEventfVirtualDesk, ax, ay, 0)})
 }
 
 func buttonFlags(button string, down bool) (uint32, error) {

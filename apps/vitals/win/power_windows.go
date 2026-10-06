@@ -31,16 +31,37 @@ import (
 // schedules are Task Scheduler tasks under Vitals\.
 
 var (
-	modpowrprof              = windows.NewLazySystemDLL("powrprof.dll")
-	moduser32                = windows.NewLazySystemDLL("user32.dll")
-	modadvapi32              = windows.NewLazySystemDLL("advapi32.dll")
-	procSetSuspendState      = modpowrprof.NewProc("SetSuspendState")
-	procGetPwrCapabilities   = modpowrprof.NewProc("GetPwrCapabilities")
-	procLockWorkStation      = moduser32.NewProc("LockWorkStation")
-	procSendMessageTimeoutW  = moduser32.NewProc("SendMessageTimeoutW")
-	procSetThreadExecState   = modkernel32.NewProc("SetThreadExecutionState")
-	procAdjustTokenPrivilege = modadvapi32.NewProc("AdjustTokenPrivileges")
+	modpowrprof               = windows.NewLazySystemDLL("powrprof.dll")
+	moduser32                 = windows.NewLazySystemDLL("user32.dll")
+	modadvapi32               = windows.NewLazySystemDLL("advapi32.dll")
+	procSetSuspendState       = modpowrprof.NewProc("SetSuspendState")
+	procGetPwrCapabilities    = modpowrprof.NewProc("GetPwrCapabilities")
+	procPowerGetActiveScheme  = modpowrprof.NewProc("PowerGetActiveScheme")
+	procPowerReadACValueIndex = modpowrprof.NewProc("PowerReadACValueIndex")
+	procPowerReadDCValueIndex = modpowrprof.NewProc("PowerReadDCValueIndex")
+	procPowerReadFriendlyName = modpowrprof.NewProc("PowerReadFriendlyName")
+	procLockWorkStation       = moduser32.NewProc("LockWorkStation")
+	procSendMessageTimeoutW   = moduser32.NewProc("SendMessageTimeoutW")
+	procSetThreadExecState    = modkernel32.NewProc("SetThreadExecutionState")
+	procAdjustTokenPrivilege  = modadvapi32.NewProc("AdjustTokenPrivileges")
 )
+
+// settingGUIDs are the power setting GUIDs behind the powercfg aliases of
+// powercfg.go, for the powrprof reads (docs/research/windows-power-management.md §1).
+var settingGUIDs = map[string]string{
+	subButtons:    "{4F971E89-EEBD-4455-A8DE-9E59040E7347}",
+	lidAction:     "{5CA83367-6E45-459F-A27B-476B1D01C936}",
+	pButtonAction: "{7648EFA3-DD9C-4E3E-B566-50F929386280}",
+	lidOpenWake:   "{99FF10E7-23B1-4C07-A9D1-5C3206D741B4}",
+	subVideo:      "{7516B95F-F776-4464-8C53-06167F40CC99}",
+	videoIdle:     "{3C0BC021-C8A8-4E07-A973-6B14CBCB2B7E}",
+	subSleep:      "{238C9FA8-0AAD-41ED-83F4-97BE242C8F20}",
+	standbyIdle:   "{29F6C1DB-86DA-48C5-9FDB-F2B67B1F44DA}",
+}
+
+// boolean reads a BOOLEAN (one byte) return value: the rest of the return
+// register is undefined, so the whole uintptr must not be compared with 0.
+func boolean(r uintptr) bool { return byte(r) != 0 }
 
 const (
 	esContinuous      = 0x80000000
@@ -101,7 +122,13 @@ func (p *windowsPower) run(tool string, args ...string) (string, error) {
 	return text, nil
 }
 
+// queryIndex reads the AC and DC value indexes of a setting of the active
+// scheme: through powrprof (no child process, no localized text), falling
+// back to `powercfg /q` and its parser when the API is unavailable.
 func (p *windowsPower) queryIndex(sub, setting string) (ac, dc uint32, err error) {
+	if ac, dc, err := readIndexAPI(sub, setting); err == nil {
+		return ac, dc, nil
+	}
 	out, err := p.run("powercfg.exe", "/q", schemeCurrent, sub, setting)
 	if err != nil {
 		return 0, 0, err
@@ -109,9 +136,73 @@ func (p *windowsPower) queryIndex(sub, setting string) (ac, dc uint32, err error
 	return parsePowercfgIndex(out)
 }
 
+// withActiveScheme runs fn with the active scheme GUID from
+// PowerGetActiveScheme (freed with LocalFree).
+func withActiveScheme(fn func(scheme *windows.GUID) error) error {
+	var scheme *windows.GUID
+	if r, _, _ := procPowerGetActiveScheme.Call(0, uintptr(unsafe.Pointer(&scheme))); uint32(r) != 0 {
+		return fmt.Errorf("PowerGetActiveScheme: %w", windows.Errno(uint32(r)))
+	}
+	if scheme == nil {
+		return errors.New("PowerGetActiveScheme: no scheme")
+	}
+	defer windows.LocalFree(windows.Handle(unsafe.Pointer(scheme)))
+	return fn(scheme)
+}
+
+// readIndexAPI is PowerReadACValueIndex + PowerReadDCValueIndex for a
+// (subgroup, setting) alias pair of powercfg.go.
+func readIndexAPI(sub, setting string) (ac, dc uint32, err error) {
+	subGUID, err := windows.GUIDFromString(settingGUIDs[sub])
+	if err != nil {
+		return 0, 0, fmt.Errorf("subgroup %s: %w", sub, err)
+	}
+	setGUID, err := windows.GUIDFromString(settingGUIDs[setting])
+	if err != nil {
+		return 0, 0, fmt.Errorf("setting %s: %w", setting, err)
+	}
+	err = withActiveScheme(func(scheme *windows.GUID) error {
+		for _, rd := range []struct {
+			proc *windows.LazyProc
+			out  *uint32
+		}{{procPowerReadACValueIndex, &ac}, {procPowerReadDCValueIndex, &dc}} {
+			r, _, _ := rd.proc.Call(0, uintptr(unsafe.Pointer(scheme)), uintptr(unsafe.Pointer(&subGUID)), uintptr(unsafe.Pointer(&setGUID)), uintptr(unsafe.Pointer(rd.out)))
+			if uint32(r) != 0 {
+				return fmt.Errorf("%s %s/%s: %w", rd.proc.Name, sub, setting, windows.Errno(uint32(r)))
+			}
+		}
+		return nil
+	})
+	return ac, dc, err
+}
+
+// activeSchemeName is the friendly name of the active scheme through
+// PowerReadFriendlyName (a NULL subgroup and setting name the scheme).
+func activeSchemeName() (string, error) {
+	var name string
+	err := withActiveScheme(func(scheme *windows.GUID) error {
+		var size uint32
+		r, _, _ := procPowerReadFriendlyName.Call(0, uintptr(unsafe.Pointer(scheme)), 0, 0, 0, uintptr(unsafe.Pointer(&size)))
+		if st := uint32(r); st != 0 && st != uint32(windows.ERROR_MORE_DATA) {
+			return fmt.Errorf("PowerReadFriendlyName: %w", windows.Errno(st))
+		}
+		if size < 2 {
+			return errors.New("PowerReadFriendlyName: empty name")
+		}
+		buf := make([]uint16, size/2+1)
+		r, _, _ = procPowerReadFriendlyName.Call(0, uintptr(unsafe.Pointer(scheme)), 0, 0, uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&size)))
+		if uint32(r) != 0 {
+			return fmt.Errorf("PowerReadFriendlyName: %w", windows.Errno(uint32(r)))
+		}
+		name = strings.TrimSpace(windows.UTF16ToString(buf))
+		return nil
+	})
+	return name, err
+}
+
 func capabilities() (systemPowerCapabilities, bool) {
 	var c systemPowerCapabilities
-	if r, _, _ := procGetPwrCapabilities.Call(uintptr(unsafe.Pointer(&c))); r == 0 {
+	if r, _, _ := procGetPwrCapabilities.Call(uintptr(unsafe.Pointer(&c))); !boolean(r) {
 		return c, false
 	}
 	return c, true
@@ -189,7 +280,9 @@ func (p *windowsPower) Get() (PowerModel, error) {
 	} else {
 		errs = append(errs, err.Error())
 	}
-	if out, err := p.run("powercfg.exe", "/getactivescheme"); err == nil {
+	if name, err := activeSchemeName(); err == nil && name != "" {
+		m.Scheme = name
+	} else if out, err := p.run("powercfg.exe", "/getactivescheme"); err == nil {
 		if _, name := parseActiveScheme(out); name != "" {
 			m.Scheme = name
 		}
@@ -271,7 +364,7 @@ func (p *windowsPower) Action(action string) error {
 			return bridge.Errorf(bridge.CodeNotAuthorized, "shutdown privilege: %v", err)
 		}
 		r, _, e := procSetSuspendState.Call(0, 0, 0)
-		if r == 0 {
+		if !boolean(r) {
 			if errors.Is(e, windows.ERROR_NOT_SUPPORTED) { // Modern Standby: display off is the sleep entry
 				displayOff()
 				return nil
@@ -367,10 +460,13 @@ func (a *awakeKeeper) Set(enabled bool, mode string) {
 		go a.loop(a.flags, a.stop, f)
 		return
 	}
+	// Only the latest flags matter: replace a pending update instead of
+	// dropping this one.
 	select {
-	case a.flags <- f:
+	case <-a.flags:
 	default:
 	}
+	a.flags <- f
 }
 
 func (a *awakeKeeper) loop(flags <-chan uintptr, stop <-chan struct{}, initial uintptr) {
