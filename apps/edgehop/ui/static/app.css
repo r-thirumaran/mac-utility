@@ -84,7 +84,7 @@
 .eh-tile.is-dragging { opacity: 0.35; }
 .eh-tile .eh-screen { width: 50%; max-width: 72px; }
 .eh-tile-name { font-size: var(--text-xs); font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eh-tile-sub { font-size: 10px; color: var(--text-faint); white-space: nowrap; }
+.eh-tile-sub { font-size: 10px; color: var(--text-faint); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .eh-tile-ghost {
   position: fixed; z-index: 100; pointer-events: none; width: 104px; aspect-ratio: 4 / 3;
   transform: translate(-50%, -50%); opacity: 0.92;

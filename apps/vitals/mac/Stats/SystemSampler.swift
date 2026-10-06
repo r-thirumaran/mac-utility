@@ -59,11 +59,11 @@ final class SystemSampler {
     /// interval the loop now runs at plus the subscriber count.
     func subscribe(intervalMs: Int) -> (intervalMs: Int, subscribers: Int) {
         let wanted = SystemSampler.clamp(intervalMs)
-        return queue.sync {
+        return queue.sync { () -> (intervalMs: Int, subscribers: Int) in
             subscribers += 1
             requestedMs = subscribers == 1 ? wanted : min(requestedMs, wanted)
             reschedule()
-            return (requestedMs, subscribers)
+            return (intervalMs: requestedMs, subscribers: subscribers)
         }
     }
 

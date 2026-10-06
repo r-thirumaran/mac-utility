@@ -184,9 +184,9 @@ export default async function (t) {
   await L.fill('#set-deadzone', '48');
   await L.$eval('#set-deadzone', (e) => e.dispatchEvent(new Event('change')));
   await waitState(L, () => window.__edgehop.state.settings.edgeCornerDeadZonePx === 48, 'dead zone saved');
-  await L.click('#set-clipboard');
+  await L.click('#set-clipboard + .toggle-track');
   await waitState(L, () => window.__edgehop.state.settings.clipboardSync === false, 'clipboard toggle saved');
-  await L.click('#set-clipboard');
+  await L.click('#set-clipboard + .toggle-track');
   await waitState(L, () => window.__edgehop.state.settings.clipboardSync === true, 'clipboard toggle restored');
   await L.selectOption('#set-hotkey', 'ctrl+shift');
   await waitState(L, () => window.__edgehop.state.settings.hotkeySwitch === 'ctrl+shift', 'hotkey saved');

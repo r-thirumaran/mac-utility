@@ -55,8 +55,8 @@ export function screenGlyph(m, { large = false } = {}) {
 
 function displaySummary(displays) {
   if (!displays?.length) return 'no displays';
-  const parts = displays.map((d) => `${d.w}×${d.h}`);
-  return parts.length <= 2 ? parts.join(' + ') : `${parts.length} displays`;
+  if (displays.length === 1) return `${displays[0].w}×${displays[0].h}`;
+  return `${displays.length} displays`;
 }
 
 /** The editor. `onSave(layout)` receives {updatedAt, tiles:[{id,col,row}]}. */

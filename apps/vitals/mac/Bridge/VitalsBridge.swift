@@ -294,7 +294,8 @@ final class VitalsBridge {
 
     // MARK: - Shapes
 
-    private static func json(_ row: ProcessSampler.Row) -> [String: Any] {
+    /// Runs on the process queue, hence `nonisolated`.
+    nonisolated private static func json(_ row: ProcessSampler.Row) -> [String: Any] {
         var object: [String: Any] = [
             "pid": row.pid,
             "name": row.name,
