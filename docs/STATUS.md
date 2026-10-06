@@ -13,7 +13,7 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 | Clipwell | window snapping + clipboard history (copied from r-thirumaran/Clipwell) | CI builds DMG (green) | n/a (macOS-only app) | n/a |
 | Vitals | CPU / RAM / GPU / process monitor + power & lid-close settings | DMG built by CI (f6ad584) | exe built by CI, Go tests green on Linux + Windows | n/a |
 | Edgehop | one mouse + keyboard across Macs and Windows PCs (screen-edge switching) | mac app in progress (batch 2) | Go core + Windows backend + UI committed, tests green | n/a |
-| Reach | control any laptop from your phone (agent + mobile app) | mac agent in progress (batch 2) | Go agent committed, tests green | PWA committed (Playwright-tested); Capacitor wrapper pending |
+| Reach | control any laptop from your phone (agent + mobile app) | mac agent in progress (batch 2) | Go agent committed, tests green on Linux + Windows, exe built | PWA committed (Playwright-tested); Capacitor 8 Android + iOS projects committed, APK CI job added (e026c6d) |
 
 ## Phase 0 — scaffold
 - [x] Copy Clipwell source into `apps/clipwell/` (from r-thirumaran/Clipwell@dbdd2cd)
@@ -49,7 +49,7 @@ Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
 ## Orchestration plan (resume here after a usage-limit pause)
 1. Batch 1 (running): three Linux-testable agents — Vitals win+ui, Edgehop core/win/ui, Reach win+PWA. Commit each as it lands; CI (go-linux, go-windows) must be green.
 2. Batch 2: Vitals mac (continue from apps/vitals/mac/Stats), Edgehop mac, Reach mac — Swift, verified only by the macOS CI jobs; add each app to the macOS DMG matrix in .github/workflows/build.yml when its sources exist.
-3. Batch 3: Reach Capacitor wrapper (apps/reach/mobile) + Android APK CI job; conformance pass (mac vs win method surfaces); adversarial code review; READMEs; tag v0.1.0 to publish the release with all DMGs/exes/APK.
+3. Batch 3: Reach Capacitor wrapper DONE; next: conformance pass (mac vs win method surfaces); adversarial code review; READMEs; tag v0.1.0 to publish the release with all DMGs/exes/APK.
 Run at most three implementation agents at once: six in parallel exhausted the usage window before any of them finished.
 
 ## Blockers / notes
