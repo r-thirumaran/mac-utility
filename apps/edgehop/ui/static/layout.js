@@ -92,10 +92,11 @@ export class LayoutEditor {
         h('div.card-header', {},
           h('div', {}, h('div.card-title', {}, 'Screen layout'), h('div.card-subtitle', {}, 'Drag machines next to each other. The pointer crosses an edge where two tiles touch; the layout is shared with every machine.')),
           h('div.row.gap-2.shrink-0', {}, this.autoBtn, this.revertBtn, this.saveBtn)),
-        this.grid,
         h('div.row.gap-2.wrap.items-center', {}, h('span.text-sm.weight-500', {}, 'Not placed:'), this.unplaced),
-        h('div.eh-legend', {}, h('span.is-self', {}, 'This machine'), h('span.is-active', {}, 'Has the pointer now'), h('span.is-offline', {}, 'Offline'), h('span', {}, 'Online')),
-        this.hint));
+        this.grid,
+        h('div.row.gap-3.wrap.items-center', {},
+          h('div.eh-legend', {}, h('span.is-self', {}, 'This machine'), h('span.is-active', {}, 'Has the pointer now'), h('span.is-offline', {}, 'Offline'), h('span', {}, 'Online')),
+          this.hint)));
     this.grid.addEventListener('pointerdown', (e) => this.onPointerDown(e));
     this.unplaced.addEventListener('pointerdown', (e) => this.onPointerDown(e));
     this.container.addEventListener('keydown', (e) => this.onKey(e));
@@ -246,10 +247,11 @@ export class LayoutEditor {
     this.drag.ghost.style.top = `${e.clientY}px`;
   }
 
-  cellUnder(e) {
-    this.drag.ghost.style.display = 'none';
+  cellUnder(e, d = this.drag) {
+    if (!d) return null;
+    d.ghost.style.display = 'none';
     const el = document.elementFromPoint(e.clientX, e.clientY);
-    this.drag.ghost.style.display = '';
+    d.ghost.style.display = '';
     return el?.closest?.('.eh-cell') || null;
   }
 
@@ -269,13 +271,13 @@ export class LayoutEditor {
     const d = this.drag;
     if (!d) return;
     this.drag = null;
+    const cell = this.cellUnder(e, d) || d.over;
     d.ghost.remove();
     d.tile.classList.remove('is-dragging');
     d.over?.classList.remove('is-over');
     if (!d.moved) return;
-    const cell = this.cellUnder(e) || d.over;
     if (cell) this.place(d.id, +cell.dataset.col, +cell.dataset.row);
-    else if (this.grid.contains(d.tile) && !this.grid.getBoundingClientRect || !this.inside(this.grid, e)) this.unplace(d.id);
+    else if (!this.inside(this.grid, e)) this.unplace(d.id); // dropped outside the grid
     this.focusTile(d.id);
   }
 

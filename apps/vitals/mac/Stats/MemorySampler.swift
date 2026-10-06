@@ -7,7 +7,7 @@ import Foundation
 /// kernel page size (16 KiB on Apple silicon, 4 KiB on Intel — never hard-code it). The
 /// rows follow Activity Monitor: app memory = anonymous − purgeable, used = app + wired +
 /// compressed, cached files = file-backed + purgeable. Swap is `vm.swapusage`; pressure is the
-/// kernel's dispatch-encoded `kern.memorystatus_vm_pressure_level` (1 normal, 2 warn,
+/// kernel's dispatch-encoded `kern.memorystatus_vm_pressure_level` (1 normal, 2 warning,
 /// 4 critical), with the free-page percentage `kern.memorystatus_level` as a fallback.
 final class MemorySampler {
 
@@ -20,7 +20,7 @@ final class MemorySampler {
         var cached: UInt64
         var swapUsed: UInt64
         var swapTotal: UInt64
-        /// "normal" | "warn" | "critical".
+        /// "normal" | "warning" | "critical" (the labels the UI and the Go backend use).
         var pressure: String
         /// Percentage of pages the kernel considers available, 0 … 100 (−1 if unreadable).
         var availablePercent: Int
@@ -83,14 +83,14 @@ final class MemorySampler {
         if let level = readInt32("kern.memorystatus_vm_pressure_level") {
             switch level {
             case 4: return "critical"
-            case 2: return "warn"
+            case 2: return "warning"
             case 1: return "normal"
             default: break
             }
         }
         guard availablePercent >= 0 else { return "normal" }
         if availablePercent < 5 { return "critical" }
-        if availablePercent < 15 { return "warn" }
+        if availablePercent < 15 { return "warning" }
         return "normal"
     }
 

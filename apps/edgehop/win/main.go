@@ -57,6 +57,7 @@ func main() {
 		fakeDisplays = flag.String("fake-displays", "", "fake monitors, e.g. 1920x1080;2560x1440+1920+0")
 		configDir    = flag.String("config-dir", "", "config directory (default per OS)")
 		peer         = flag.String("peer", "", "host:port of a machine to pair with at start")
+		noMDNS       = flag.Bool("no-mdns", false, "do not advertise or browse Bonjour (tests)")
 		debug        = flag.Bool("debug", false, "log debug lines")
 		showVersion  = flag.Bool("version", false, "print the version and exit")
 	)
@@ -65,13 +66,22 @@ func main() {
 		fmt.Println("Edgehop", version)
 		return
 	}
-	if err := run(*listen, *noUI, *name, *port, *fakeInput, *fakeDisplays, *configDir, *peer, *debug); err != nil {
+	opts := options{listen: *listen, noUI: *noUI, name: *name, port: *port, fakeInput: *fakeInput, fakeDisplays: *fakeDisplays, configDir: *configDir, peer: *peer, debug: *debug, noMDNS: *noMDNS}
+	if err := run(opts); err != nil {
 		fmt.Fprintln(os.Stderr, "edgehop:", err)
 		os.Exit(1)
 	}
 }
 
-func run(listen string, noUI bool, name string, port int, fakeInput bool, fakeDisplays, configDir, peer string, debug bool) error {
+// options are the command-line flags.
+type options struct {
+	listen, name, fakeDisplays, configDir, peer string
+	port                                        int
+	noUI, fakeInput, debug, noMDNS              bool
+}
+
+func run(o options) error {
+	listen, noUI, name, port, fakeInput, fakeDisplays, configDir, peer, debug := o.listen, o.noUI, o.name, o.port, o.fakeInput, o.fakeDisplays, o.configDir, o.peer, o.debug
 	dir, err := core.ConfigDir(configDir)
 	if err != nil {
 		return err
@@ -137,7 +147,7 @@ func run(listen string, noUI bool, name string, port int, fakeInput bool, fakeDi
 	a := &app{store: store, fake: fake, d: d, logger: logger, version: version, exe: exe, debug: debug}
 	a.tr = core.NewTransport(core.TransportConfig{
 		Self: self, Name: machineName, Plat: core.Platform(), Store: store,
-		Port: port, Emit: a.handleEvent, Logf: a.nodeLogf,
+		Port: port, DisableMDNS: o.noMDNS, Emit: a.handleEvent, Logf: a.nodeLogf,
 	})
 	a.node = core.New(core.Config{
 		ID: self.ID(), Name: machineName, Plat: core.Platform(), Version: version,

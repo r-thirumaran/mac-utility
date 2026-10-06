@@ -11,12 +11,17 @@ enum VitalsMain {
 
     /// `NSApplication.delegate` is a weak reference, so the delegate has to be owned by
     /// something that outlives `main()`.
-    private static let delegate = AppDelegate()
+    @MainActor private static var delegate: AppDelegate?
 
     static func main() {
-        let app = NSApplication.shared
-        app.setActivationPolicy(.accessory)
-        app.delegate = delegate
-        app.run()
+        // `main` runs on the main thread; the delegate and NSApplication are main-actor types.
+        MainActor.assumeIsolated {
+            let app = NSApplication.shared
+            let delegate = AppDelegate()
+            VitalsMain.delegate = delegate
+            app.setActivationPolicy(.accessory)
+            app.delegate = delegate
+            app.run()
+        }
     }
 }

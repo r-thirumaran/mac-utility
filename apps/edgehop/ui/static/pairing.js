@@ -35,8 +35,9 @@ export class PairDialog {
         h('h2.dialog-title', { id: titleId }, name ? `Pair with ${name}` : 'Pair with a machine'),
         this.body),
       this.actions);
-    this.dialog.addEventListener('cancel', (e) => { e.preventDefault(); this.cancel(); });
-    this.dialog.addEventListener('close', () => { this.dialog?.remove(); this.dialog = null; });
+    const dlg = this.dialog;
+    dlg.addEventListener('cancel', (e) => { e.preventDefault(); this.cancel(); });
+    dlg.addEventListener('close', () => { dlg.remove(); if (this.dialog === dlg) this.dialog = null; });
     document.body.append(this.dialog);
     this.dialog.showModal();
     if (peerId) this.start({ peerId });
@@ -67,6 +68,7 @@ export class PairDialog {
   }
 
   async start(params) {
+    if (params.address) this.address = params.address;
     this.renderConnecting(params.address || this.peerName);
     try {
       await native.call('edgehop.pair.start', params);
@@ -130,15 +132,17 @@ export class PairDialog {
       h('button.btn.btn-primary', { type: 'button', id: 'pair-retry', onclick: () => (this.peerId ? this.start({ peerId: this.peerId }) : this.renderAddress()) }, 'Try again'));
   }
 
-  /** Feed an edgehop.pairing event. */
+  /** Feed an edgehop.pairing event (or the pairing field of edgehop.state). */
   update(p) {
     if (!p) return;
+    if (!this.dialog) {
+      // Only an in-flight pairing (e.g. started with --peer before the window opened) reopens the dialog.
+      if (p.stage !== 'connecting' && p.stage !== 'waiting_code') return;
+      this.show({ peerId: '', name: p.name, address: p.address });
+    }
     if (p.peerId) this.peerId = p.peerId;
     if (p.name) this.peerName = p.name;
-    if (!this.dialog) {
-      if (p.stage === 'connecting' || p.stage === 'waiting_code') this.show({ peerId: '', name: p.name, address: p.address });
-      else return;
-    }
+    if (p.stage === this.stage) return; // already showing this step
     switch (p.stage) {
       case 'connecting': if (this.stage !== 'connecting') this.renderConnecting(p.address); break;
       case 'waiting_code': if (this.stage !== 'waiting_code') this.renderCode(); break;
@@ -183,7 +187,8 @@ export class CodeDialog {
         h('p.text-center', {}, left),
         h('p.hint.text-center', {}, 'Only confirm a code on a machine you expected to pair. Anyone who knows it can control this computer.')),
       h('div.dialog-actions', {}, h('button.btn.btn-secondary', { type: 'button', id: 'code-dismiss', onclick: () => this.close() }, 'Dismiss')));
-    this.dialog.addEventListener('close', () => { this.dialog?.remove(); this.dialog = null; clearInterval(this.timer); });
+    const dlg = this.dialog;
+    dlg.addEventListener('close', () => { dlg.remove(); if (this.dialog === dlg) { this.dialog = null; clearInterval(this.timer); } });
     document.body.append(this.dialog);
     this.dialog.showModal();
     const until = Date.now() + ttlSec * 1000;

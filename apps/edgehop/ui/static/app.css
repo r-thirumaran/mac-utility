@@ -64,11 +64,12 @@
 /* -------------------------------------------------------------- layout */
 .eh-grid {
   display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+  width: 100%; max-width: 560px;
   padding: 6px; border-radius: var(--radius-md); background: var(--surface-2); border: 1px solid var(--border);
   touch-action: none;
 }
 .eh-cell {
-  position: relative; aspect-ratio: 3 / 2; border-radius: var(--radius-sm);
+  position: relative; aspect-ratio: 4 / 3; border-radius: var(--radius-sm);
   background: var(--surface); border: 1px dashed var(--border); min-width: 0;
 }
 .eh-cell.is-over { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
@@ -81,17 +82,17 @@
 .eh-tile.is-active { border-color: var(--accent); box-shadow: var(--eh-tile-glow); }
 .eh-tile.is-offline { opacity: 0.6; border-style: dashed; }
 .eh-tile.is-dragging { opacity: 0.35; }
-.eh-tile .eh-screen { width: 56%; max-width: 88px; }
+.eh-tile .eh-screen { width: 50%; max-width: 72px; }
 .eh-tile-name { font-size: var(--text-xs); font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eh-tile-sub { font-size: 10px; color: var(--text-faint); white-space: nowrap; }
 .eh-tile-ghost {
-  position: fixed; z-index: 100; pointer-events: none; width: 110px; aspect-ratio: 3 / 2;
+  position: fixed; z-index: 100; pointer-events: none; width: 104px; aspect-ratio: 4 / 3;
   transform: translate(-50%, -50%); opacity: 0.92;
 }
 .eh-tile-ghost .eh-tile { position: absolute; inset: 0; cursor: grabbing; box-shadow: var(--shadow-lg); }
 .eh-unplaced { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; min-height: 36px; }
-.eh-unplaced .eh-tile { position: static; width: 110px; aspect-ratio: 3 / 2; }
-.eh-legend { display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--text-sm); color: var(--text-muted); }
+.eh-unplaced .eh-tile { position: static; width: 104px; aspect-ratio: 4 / 3; }
+.eh-legend { display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--text-sm); color: var(--text-muted); flex: 1 1 auto; }
 .eh-legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--border-strong); background: var(--surface); }
 .eh-legend .is-active::before { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
 .eh-legend .is-offline::before { border-style: dashed; opacity: 0.6; }
