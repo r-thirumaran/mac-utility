@@ -114,6 +114,8 @@ final class Node {
     private var ticker: DispatchSourceTimer?
     private var started = false
     private var shake = ShakeDetector()
+    /// Accumulates trackpad gesture events into one gesture at a time (spec §6 addition).
+    private var gestures = GestureRecognizer()
 
     // MARK: - Lifecycle
 
@@ -614,6 +616,7 @@ final class Node {
         forwardedToActive = false
         edgePending = nil
         shake.reset()
+        gestures.reset()
         let point: Geometry.Point
         if let pt = enter?.pt {
             point = Geometry.entryPoint(pt: pt.point, displays: displays)
@@ -717,6 +720,9 @@ final class Node {
             }
             return false
         }
+        if event.kind == .gesture {
+            return onLocalGesture(event)
+        }
         switch event.kind {
         case .mouseMove:
             // Spec §6: detected from the raw deltas of the physical mouse, whether or not
@@ -757,6 +763,61 @@ final class Node {
         }
         forward(event)
         return true
+    }
+
+    /// A trackpad gesture event. While this Mac drives another machine the gesture belongs
+    /// there: it is accumulated, swallowed (returning `true`, or the local Mac would switch
+    /// desktop under the user's hands) and sent on as the equivalent chord once complete. While
+    /// this Mac is the active machine — or with the setting off — nothing is touched and macOS
+    /// handles the gesture as usual.
+    private func onLocalGesture(_ event: InputEvent) -> Bool {
+        guard settings.translateGestures, !isSelf(active), let reading = event.gesture else {
+            gestures.reset()
+            return false
+        }
+        if let gesture = gestures.feed(reading) {
+            sendTranslatedGesture(gesture)
+        }
+        return true
+    }
+
+    /// Sends the chord one completed gesture maps to on the active machine's platform.
+    ///
+    /// The receiver swaps ⌘ and Ctrl on input from a different platform (`handleInput`, and
+    /// `core/node.go` does the same), which would turn Win+Tab into Ctrl+Tab. These chords are
+    /// named for the target, so the swap is undone here — `swapGUICtrl` is its own inverse —
+    /// and the chord lands exactly as named whatever the user's Swap ⌘/Ctrl setting is.
+    private func sendTranslatedGesture(_ gesture: TrackpadGesture) {
+        guard let p = peers[active] else { return }
+        guard let chord = GestureTranslator.chord(for: gesture, target: GestureTarget(plat: p.plat)) else {
+            log("debug", "gesture: \(gesture.name) → nothing on \(p.plat.isEmpty ? "an unknown platform" : p.plat)")
+            return
+        }
+        log("debug", "gesture: \(gesture.name) → \(chord.name) on \(peerName(active))")
+        let invert = settings.swapCmdCtrl && !p.plat.isEmpty && p.plat != plat
+        func onTheWire(_ usage: Int) -> Int {
+            invert ? Node.swapGUICtrl(usage) : usage
+        }
+        var modsByte: UInt8 = 0
+        for usage in chord.mods {
+            if let bit = KeyMap.modifierBit(onTheWire(usage)) {
+                modsByte |= bit
+            }
+        }
+        for usage in chord.mods {
+            send(Wire.key(usage: onTheWire(usage), state: Wire.keyDown, mods: modsByte), to: active)
+        }
+        if let key = chord.key {
+            send(Wire.key(usage: onTheWire(key), state: Wire.keyDown, mods: modsByte), to: active)
+            send(Wire.key(usage: onTheWire(key), state: Wire.keyUp, mods: modsByte), to: active)
+        }
+        if chord.wheel != 0 {
+            send(Wire.scroll(dx: 0, dy: chord.wheel * 120, flags: Wire.scrollFlagDiscrete), to: active)
+        }
+        for usage in chord.mods.reversed() {
+            send(Wire.key(usage: onTheWire(usage), state: Wire.keyUp, mods: 0), to: active)
+        }
+        forwardedToActive = true
     }
 
     /// Spec §6: this machine's pointer was shaken. When it drives a remote machine the ring
@@ -809,6 +870,10 @@ final class Node {
             frame = Wire.key(usage: event.wire, state: state, mods: m)
         case .keyText:
             frame = Wire.keyText(event.text)
+        case .gesture:
+            // Handled in `onLocalGesture`, which never falls through to here: a gesture goes
+            // out as a translated chord, never as itself.
+            return
         }
         forwardedToActive = true
         send(frame, to: active)

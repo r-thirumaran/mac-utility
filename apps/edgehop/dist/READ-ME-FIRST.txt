@@ -15,7 +15,12 @@ Needs macOS 14 (Sonoma) or later. Works on Apple silicon and Intel Macs.
    (Right-click ▸ Open no longer works on macOS 15. If System Settings ▸
    Privacy & Security says "Edgehop was blocked", click "Open Anyway".)
 
-3. Start it:   open /Applications/Edgehop.app
+3. Clear the permissions macOS remembers for an older build, then start it
+   (required after EVERY install or update):
+
+     tccutil reset Accessibility com.thiru.edgehop
+     tccutil reset ListenEvent com.thiru.edgehop
+     open /Applications/Edgehop.app
 
    Edgehop has NO Dock icon and opens no window: it is the icon in the menu
    bar at the top right. Click it ▸ Open Edgehop. To confirm it is running:

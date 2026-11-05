@@ -28,6 +28,21 @@ final class EventTap {
     private static let capsLockKeyCode = 57
     private static let capsLockWire = 0x39
 
+    /// Trackpad gestures. Neither raw type is a `CGEventType` case, so their mask bits are set
+    /// by hand: 29 is the `NSEvent` gesture family (pinch, rotate, swipe, Force Touch pressure,
+    /// smart zoom) and 30 is Dock control (the desktop swipes, Mission Control, App Exposé).
+    private static let gestureType: UInt32 = 29
+    private static let dockGestureType: UInt32 = 30
+
+    /// Private `CGEvent` fields of the gesture events — macOS publishes no constants for them,
+    /// so they are built from the raw numbers documented by Mac Mouse Fix and Swish.
+    private static let fieldGestureHIDType: UInt32 = 110
+    private static let fieldSwipeAxis: UInt32 = 123
+    private static let fieldProgress: UInt32 = 124
+    private static let fieldPhase: UInt32 = 132
+    /// Value of `fieldGestureHIDType` for a pinch.
+    private static let gestureHIDMagnify = 8
+
     private static let mouseTypes: [CGEventType] = [
         .mouseMoved, .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
         .otherMouseDown, .otherMouseUp, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged,
@@ -81,10 +96,18 @@ final class EventTap {
         types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
     }
 
+    private static func mask(raw types: [UInt32]) -> CGEventMask {
+        types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1) }
+    }
+
     private func install() {
         guard running, !capturesKeys else { return }
-        let fullMask = EventTap.mask(EventTap.mouseTypes + EventTap.keyTypes) | (CGEventMask(1) << EventTap.systemDefinedType)
-        let mouseMask = EventTap.mask(EventTap.mouseTypes)
+        // Gestures come from the trackpad, so they ride along with the mouse mask and work
+        // with Accessibility alone (no Input Monitoring needed).
+        let gestureMask = EventTap.mask(raw: [EventTap.gestureType, EventTap.dockGestureType])
+        let fullMask = EventTap.mask(EventTap.mouseTypes + EventTap.keyTypes)
+            | (CGEventMask(1) << EventTap.systemDefinedType) | gestureMask
+        let mouseMask = EventTap.mask(EventTap.mouseTypes) | gestureMask
         if let full = create(mask: fullMask, options: .defaultTap) {
             uninstall()
             activate(full)
@@ -233,6 +256,12 @@ final class EventTap {
             if type.rawValue == EventTap.systemDefinedType {
                 return handleSystemDefined(event, injected: injected, handler: handler)
             }
+            if type.rawValue == EventTap.gestureType || type.rawValue == EventTap.dockGestureType {
+                return handleGesture(event,
+                                     dock: type.rawValue == EventTap.dockGestureType,
+                                     injected: injected,
+                                     handler: handler)
+            }
             return false
         }
     }
@@ -295,7 +324,71 @@ final class EventTap {
         return handler(ev) && !injected
     }
 
+    /// One trackpad gesture event, decoded into a `GestureReading`. The node decides whether to
+    /// translate it for the machine in control (and so swallow it here) or let macOS have it.
+    private func handleGesture(_ event: CGEvent, dock: Bool, injected: Bool,
+                               handler: @MainActor (InputEvent) -> Bool) -> Bool {
+        guard let reading = EventTap.gestureReading(event, dock: dock) else { return false }
+        var ev = InputEvent(kind: .gesture)
+        ev.injected = injected
+        ev.gesture = reading
+        return handler(ev) && !injected
+    }
+
+    /// Reads the fields of a gesture event; `nil` for the gestures Edgehop does not translate
+    /// (rotate, smart zoom, the raw multi-touch `.gesture` events).
+    private static func gestureReading(_ event: CGEvent, dock: Bool) -> GestureReading? {
+        if dock {
+            var reading = GestureReading(source: .dockSwipe)
+            reading.axis = intField(event, EventTap.fieldSwipeAxis)
+            reading.delta = doubleField(event, EventTap.fieldProgress)
+            reading.phase = intField(event, EventTap.fieldPhase)
+            return reading
+        }
+        let nsEvent = NSEvent(cgEvent: event)
+        if let nsEvent, nsEvent.type == .pressure {
+            var reading = GestureReading(source: .pressure)
+            reading.stage = nsEvent.stage
+            return reading
+        }
+        if let nsEvent, nsEvent.type == .magnify {
+            var reading = GestureReading(source: .magnify)
+            reading.delta = nsEvent.magnification
+            reading.phase = EventTap.phase(of: nsEvent.phase)
+            return reading
+        }
+        // No `NSEvent` wrapper (or one with a type this build does not know): fall back to the
+        // private fields, which carry the same pinch payload.
+        guard intField(event, EventTap.fieldGestureHIDType) == EventTap.gestureHIDMagnify else {
+            return nil
+        }
+        var reading = GestureReading(source: .magnify)
+        reading.delta = doubleField(event, EventTap.fieldProgress)
+        reading.phase = intField(event, EventTap.fieldPhase)
+        return reading
+    }
+
+    /// `NSEvent.Phase` bits (began 0x1, changed 0x4, ended 0x8, cancelled 0x10) → the
+    /// `GestureReading` phase numbers, which follow the `CGEvent` field instead.
+    private static func phase(of nsPhase: NSEvent.Phase) -> Int {
+        if nsPhase.contains(.began) { return GestureReading.phaseBegan }
+        if nsPhase.contains(.ended) { return GestureReading.phaseEnded }
+        if nsPhase.contains(.cancelled) { return GestureReading.phaseCancelled }
+        if nsPhase.contains(.changed) { return GestureReading.phaseChanged }
+        return 0
+    }
+
     // MARK: - Helpers
+
+    private static func intField(_ event: CGEvent, _ raw: UInt32) -> Int {
+        guard let field = CGEventField(rawValue: raw) else { return 0 }
+        return Int(event.getIntegerValueField(field))
+    }
+
+    private static func doubleField(_ event: CGEvent, _ raw: UInt32) -> Double {
+        guard let field = CGEventField(rawValue: raw) else { return 0 }
+        return event.getDoubleValueField(field)
+    }
 
     /// macOS button numbers → wire numbers (0 left, 1 right, 2 middle, 3 back, 4 forward).
     private static func wireButton(type: CGEventType, number: Int) -> Int {

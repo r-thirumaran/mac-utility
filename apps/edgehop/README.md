@@ -82,8 +82,78 @@ on a paired machine can move your mouse and type on yours.
 | Sync clipboard | Text clipboard follows the pointer. |
 | Hotkey | The modifiers held with ←/→/↑/↓ (move control) and Home (bring it back). |
 | Hide the pointer here | Park and hide this machine's pointer while it is on another machine. |
+| Send trackpad gestures to the other computer | Recognise Magic Trackpad gestures while the pointer is on another machine and send that machine's own shortcut instead of acting here. On by default; see [Trackpad gestures](#trackpad-gestures). |
 | Launch at login | Start Edgehop when you sign in (Windows: `HKCU\…\Run`; macOS: Login Items). |
 | Port | The TCP port other machines connect to (default 24800; 0 = any free port). Changing it takes effect after a restart. |
+
+## Trackpad gestures
+
+A trackpad gesture never travels as itself. macOS resolves a three-finger
+swipe or a pinch inside the window server, and the other machine has no
+trackpad to replay it on, so without help a swipe switched desktops on the Mac
+with the trackpad while you were working on the other computer. With
+*Send trackpad gestures to the other computer* on (the default), the Mac
+recognises the finished gesture, swallows it locally and sends the keyboard
+shortcut — or the Ctrl+wheel notch — that does the same thing on the machine
+in control.
+
+It only ever applies while this Mac is **forwarding**. When the Mac itself has
+control every gesture passes through untouched and macOS handles it as always.
+
+### What already worked, without translation
+
+Two-finger scrolling, tap and click, right-click (two-finger or corner click),
+two-finger drag and click-and-drag all travel as plain mouse events and arrive
+on either platform. Nothing below changes them.
+
+### What is translated
+
+One shortcut per completed gesture — a swipe fires once when your fingers
+lift, not once per frame.
+
+| Gesture on the trackpad | Mac in control gets | Windows PC in control gets |
+|---|---|---|
+| Three/four-finger swipe left | Ctrl+← (previous desktop) | Win+Ctrl+← (previous virtual desktop) |
+| Three/four-finger swipe right | Ctrl+→ (next desktop) | Win+Ctrl+→ (next virtual desktop) |
+| Three/four-finger swipe up | Ctrl+↑ (Mission Control) | Win+Tab (Task View) |
+| Three/four-finger swipe down | Ctrl+↓ (App Exposé) | *nothing — Windows has no equivalent* |
+| Pinch open / closed | ⌘= / ⌘− per quarter of magnification | Ctrl held + one wheel notch up/down |
+| Force click (Force Touch, stage 2) | Ctrl+⌘+D (look up) | *nothing — Windows has no Force Touch* |
+
+The chords arrive exactly as listed whatever *Swap ⌘ and Ctrl* is set to:
+Edgehop undoes that swap for translated gestures, so Win+Tab stays Win+Tab.
+
+### What is not supported
+
+* **Rotate** and **smart zoom** (two-finger double tap). No shortcut on either
+  platform does the same thing, so they are dropped.
+* **Show Desktop** (thumb-and-three-fingers spread) and **Launchpad** (pinch
+  with thumb and three fingers). macOS does not hand a tap a reading this code
+  can tell apart from the other Dock gestures, so rather than guess and switch
+  the wrong desktop, Edgehop leaves them alone. Both chords are already
+  written (F11 on a Mac, Win+D on Windows) and will be wired up if a reliable
+  reading turns up.
+* **Anything on the other machine's own trackpad or mouse.** Translation runs
+  on the machine holding the trackpad; it does not give a PC's touchpad Mac
+  gestures.
+* **Windows and Linux senders.** This is macOS-only capture. A gesture made on
+  a Windows touchpad is handled by Windows.
+
+### Checking it on your hardware
+
+Turn on the debug log (Log tab) and make a gesture while the pointer is on the
+other machine. Each translated gesture writes one line:
+
+```
+gesture: swipe left → Ctrl+Left on Studio
+gesture: pinch open → Ctrl+wheel up on Work PC
+gesture: swipe down → nothing on windows
+```
+
+If left and right come out the other way round on your trackpad, macOS signs
+the swipe progress the other way: flip `positiveProgressIsRightOrUp` in
+`mac/Input/GestureTranslator.swift`. Nothing about the gesture other than its
+name and the chord name is ever logged.
 
 ## Webcams, microphones and headsets
 
@@ -97,37 +167,57 @@ you need the camera on both machines, give each one a camera.
 
 ## Windows
 
-### Install
+### Install and first run (required steps)
 
-Download `Edgehop-<version>-windows-amd64.exe` (built with `make exe-edgehop`,
-which bakes `apps/edgehop/VERSION` into the exe) and run it. Edgehop is a
-single exe: no installer, no service, nothing written outside your profile.
+Needs **Windows 10 or 11, 64-bit**. Edgehop is a single exe
+(`Edgehop-<version>-windows-amd64.exe`, built with `make exe-edgehop`): no
+installer, no service, no administrator rights, nothing written outside your
+profile. Put it somewhere permanent, e.g. `%LOCALAPPDATA%\Programs\Edgehop\`.
 
-* It lives in the notification area. The menu has **Open Edgehop**, **Launch
-  at login**, **Switch to …** for every paired machine, and **Quit**.
-* The window is an embedded WebView2 view of the UI served on a loopback port
-  with a per-run token; without the WebView2 runtime the UI opens in the
-  default browser.
+1. **Unblock the download.** The exe is not code-signed, so Windows
+   SmartScreen says *"Windows protected your PC"*: click **More info ▸ Run
+   anyway**. Or unblock it once in PowerShell:
+   ```powershell
+   Unblock-File "$env:LOCALAPPDATA\Programs\Edgehop\Edgehop.exe"
+   ```
+2. **Allow the firewall prompt** on the first start, for **Private
+   networks** only (home or office LAN). Without it other machines cannot
+   connect *to* this PC. Set your Wi-Fi to *Private* in Settings ▸ Network &
+   internet ▸ (your network) ▸ Network profile type, or the rule does not
+   apply. Missed the prompt? Run once in an **administrator** PowerShell:
+   ```powershell
+   New-NetFirewallRule -DisplayName "Edgehop" -Direction Inbound -Program "$env:LOCALAPPDATA\Programs\Edgehop\Edgehop.exe" -Action Allow -Profile Private
+   ```
+3. **Find it in the notification area** (the ^ by the clock), not the
+   taskbar: **Open Edgehop**, **Launch at login**, **Switch to …**, **Quit**.
+4. **Pair** from the Mac or the PC (Machines ▸ pick it, or **Pair by
+   address…** with the `IP:24800` the PC shows) and type the six-digit code.
+5. **Place the PC's monitors** on the Layout canvas so they touch the Mac's
+   screens, then **Save**.
+6. In **Settings** keep **Swap ⌘ and Ctrl** on: ⌘C on a Mac keyboard then
+   arrives as Ctrl+C on the PC.
+
+There is **no permission reset on Windows**: unlike macOS, an update keeps
+working. To update: **Quit** from the tray menu, replace the exe, start it.
+
+Required notes:
+
+* **The window** is a WebView2 view (built into Windows 10/11). Without the
+  WebView2 runtime the UI opens in your default browser instead.
+* **Administrator windows** (an installer, Task Manager run as admin, the UAC
+  prompt): Windows does not let a normal app send input to them, so keys and
+  clicks from the Mac are swallowed while such a window has focus. Use the
+  PC's own keyboard for that moment, or run Edgehop as administrator.
+* **The lock screen and Ctrl+Alt+Del** cannot be driven remotely (Windows
+  blocks injected input there). Sign in with the PC's own keyboard.
+* **Trackpad gestures** from a Mac arrive as their Windows shortcuts
+  (Win+Ctrl+←/→, Win+Tab, Ctrl+scroll); see [Trackpad gestures](#trackpad-gestures).
+* **Work-managed PCs** (Intune, AppLocker, Defender for Endpoint) may block an
+  unsigned exe, its firewall rule, or input hooks; then IT has to allow it.
 * Only one instance runs per user; starting a second one just exits.
 * Config (pairing keys, layout, settings): `%APPDATA%\Edgehop\config.json`
-  and `identity.json`. Log: `%LOCALAPPDATA%\Edgehop\edgehop.log` (5 MB, one
-  backup).
-
-### Permissions
-
-Edgehop runs as a standard user: it reads the mouse and keyboard with
-low-level hooks and injects input with `SendInput`, neither of which needs
-administrator rights. Two things to know:
-
-* **Windows Defender Firewall** asks whether to allow Edgehop on the first
-  start because it listens on a TCP port for the other machines. Allow it on
-  **private** networks (your home or office Wi-Fi/LAN); it never needs
-  public networks. Without the rule other machines cannot connect *to* this
-  PC; this PC can still connect *to* them if they allowed it.
-* Windows does not let a normal app send input to windows that run **as
-  administrator** (an elevated installer, Task Manager started as admin, the
-  UAC prompt itself). While such a window has focus, keys and clicks from the
-  other machine are swallowed; use the local keyboard for that moment.
+  and `identity.json`. Delete that folder to unpair everything and start over.
+  Log: `%LOCALAPPDATA%\Edgehop\edgehop.log` (5 MB, one backup).
 
 ### Command line
 
@@ -161,11 +251,11 @@ and Intel. Run these in Terminal on the Mac you are installing on:
 ```bash
 # 1. Download the disk image (no GitHub sign-in needed)
 curl -L -o ~/Downloads/Edgehop-0.1.0.dmg \
-  https://github.com/r-thirumaran/mac-utility/raw/claude/busy-meitner-hqorah/releases/edgehop/Edgehop-0.1.0.dmg
+  https://github.com/r-thirumaran/mac-utility/releases/download/edgehop-v0.1.0/Edgehop-0.1.0.dmg
 
-# 2. Mount it, copy the app to /Applications, unmount
+# 2. Quit the old copy, then mount, copy the app to /Applications, unmount
+pkill -x Edgehop; sleep 2; rm -rf /Applications/Edgehop.app
 hdiutil attach ~/Downloads/Edgehop-0.1.0.dmg -nobrowse -mountpoint /tmp/edgehop-dmg
-pkill -x Edgehop; rm -rf /Applications/Edgehop.app
 cp -R /tmp/edgehop-dmg/Edgehop.app /Applications/
 hdiutil detach /tmp/edgehop-dmg
 
@@ -173,13 +263,37 @@ hdiutil detach /tmp/edgehop-dmg
 xattr -cr /Applications/Edgehop.app
 codesign --force --deep --sign - /Applications/Edgehop.app
 
-# 4. Start it
+# 4. Clear the permissions macOS remembers for the OLD build, then start it
+tccutil reset Accessibility com.thiru.edgehop
+tccutil reset ListenEvent com.thiru.edgehop
 open /Applications/Edgehop.app
 ```
 
-Step 3 is the one that matters. The build is ad-hoc signed (not notarised by
+Step 3 lets the app open. The build is ad-hoc signed (not notarised by
 Apple), so without it macOS says the app "could not be verified", "is
 damaged and can't be opened", or silently refuses to start it.
+
+**Step 4 is required after every install or update.** macOS ties
+Accessibility and Input Monitoring to the exact build. After an update the
+switch in System Settings can still show **on** while it belongs to the old
+build, and Edgehop shows *Accessibility not granted*: the pointer can leave
+this Mac but nothing can control it. `tccutil reset` clears Edgehop's entries
+only (no other app is touched).
+
+Then grant the two permissions:
+
+1. macOS shows two prompts ("control this computer", "receive keystrokes"):
+   click **Open System Settings** on each.
+2. In **System Settings ▸ Privacy & Security** turn **Edgehop** on under
+   **Accessibility** and **Input Monitoring** (on newer macOS both are in one
+   list, **Device Control and Data Access**). No prompt? Click **+** and pick
+   `/Applications/Edgehop.app`.
+3. Quit Edgehop from its menu-bar icon and start it again
+   (`open /Applications/Edgehop.app`). The red badge in its window disappears.
+   Pairings and the layout are kept.
+
+If `open` prints `error -600`, the old copy was still quitting: run
+`open /Applications/Edgehop.app` again.
 
 **It still looks like nothing happened?** Edgehop has **no Dock icon and no
 window on start**: it is the icon in the menu bar at the top right (on a
@@ -262,6 +376,10 @@ same happens if the app is moved to another folder.
 * **Hot Corners.** Switching is suppressed within the corner dead zone
   (32 px by default, Settings ▸ Corner dead zone), so Hot Corners and the
   window buttons stay reachable.
+* **Gesture capture needs Accessibility, not Input Monitoring.** Trackpad
+  gestures ride with the mouse events, so they are captured and swallowed as
+  soon as Accessibility is granted, even while Input Monitoring is still
+  pending. See [Trackpad gestures](#trackpad-gestures).
 * **Granting a permission does not relaunch anything.** The event tap upgrades
   itself when a permission appears, but if macOS has already denied the tap
   once (typically Input Monitoring) a restart of Edgehop is needed.

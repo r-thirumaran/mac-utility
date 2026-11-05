@@ -15,6 +15,10 @@ struct InputEvent {
         case key
         /// `text` typed verbatim.
         case keyText
+        /// macOS only, never forwarded as itself: `gesture` describes one trackpad gesture
+        /// event, which the node translates into a key chord for the machine in control
+        /// (`GestureTranslator`).
+        case gesture
     }
 
     var kind: Kind
@@ -38,6 +42,8 @@ struct InputEvent {
     /// Scroll flags (bit0 discrete, bit1 momentum).
     var flags: UInt8 = 0
     var text = ""
+    /// One trackpad gesture event of a `.gesture` kind.
+    var gesture: GestureReading?
 
     init(kind: Kind) {
         self.kind = kind
