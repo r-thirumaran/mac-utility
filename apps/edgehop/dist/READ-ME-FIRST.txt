@@ -1,20 +1,31 @@
 Edgehop — read me first
 ====================
 
+Needs macOS 14 (Sonoma) or later. Works on Apple silicon and Intel Macs.
+
 1. Drag Edgehop to the Applications folder next to it.
 
-2. This build is ad-hoc signed (not notarised), so the first launch shows
-   "Apple could not verify Edgehop is free of malware". Nothing is wrong with
-   the download — that is what macOS says about any app that has not been
-   through Apple's paid notarisation. Either:
+2. This build is ad-hoc signed (not notarised by Apple), so macOS may say it
+   "could not be verified", "is damaged", or just not open it. Run these two
+   commands in Terminal once:
 
-     a. run in Terminal:   xattr -dr com.apple.quarantine /Applications/Edgehop.app
-     b. or open it once, dismiss the error, then System Settings ▸ Privacy &
-        Security ▸ scroll to Security ▸ "Open Anyway".
+     xattr -cr /Applications/Edgehop.app
+     codesign --force --deep --sign - /Applications/Edgehop.app
 
-   (Right-click ▸ Open no longer works on macOS 15.)
+   (Right-click ▸ Open no longer works on macOS 15. If System Settings ▸
+   Privacy & Security says "Edgehop was blocked", click "Open Anyway".)
 
-3. Launch Edgehop from Applications. It lives in the menu bar (no Dock icon). The
-   first run walks you through the permissions it needs.
+3. Start it:   open /Applications/Edgehop.app
+
+   Edgehop has NO Dock icon and opens no window: it is the icon in the menu
+   bar at the top right. Click it ▸ Open Edgehop. To confirm it is running:
+   pgrep -lx Edgehop
+
+4. The first run asks for Accessibility and Input Monitoring; turn Edgehop on
+   in both panes, then quit and reopen it.
+
+On a work-managed Mac, company security software may block unsigned apps
+whatever you do here. Full troubleshooting: apps/edgehop/README.md, section
+"Install on another Mac".
 
 Source and newer builds: https://github.com/r-thirumaran/mac-utility

@@ -27,13 +27,19 @@ Every push builds all artifacts on GitHub Actions (see the **build** workflow):
 Pushing a tag `v*` publishes all of them on a GitHub Release. Historical Clipwell
 images are kept in [`releases/clipwell/`](releases/clipwell/).
 
-**macOS first launch.** The builds are ad-hoc signed, so macOS says it "could not
-verify" the app. Either run `xattr -dr com.apple.quarantine /Applications/<App>.app`
-once, or open the app once, dismiss the message, then allow it under
-System Settings ▸ Privacy & Security ▸ *Open Anyway*. Each app then asks for the
-permissions it needs (Accessibility, Input Monitoring, Screen Recording) and
-links you to the right settings pane. Those grants are tied to the code
-signature, so after you rebuild an app yourself you may have to grant them again.
+**macOS first launch.** The builds are ad-hoc signed (not notarised), so macOS may
+say the app "could not be verified" or "is damaged", or silently not open it. Run once:
+
+```bash
+xattr -cr /Applications/<App>.app && codesign --force --deep --sign - /Applications/<App>.app
+```
+
+Then `open /Applications/<App>.app`. All four apps have no Dock icon:
+look for them in the menu bar. Each app then asks for the permissions it needs
+(Accessibility, Input Monitoring, Screen Recording) and links you to the right
+settings pane. Those grants are tied to the code signature, so after you rebuild
+or re-sign an app you may have to grant them again. Edgehop's step-by-step install
+and troubleshooting table: [apps/edgehop/README.md](apps/edgehop/README.md#install-on-another-mac-and-fix-it-wont-open).
 
 **Windows first launch.** Run the exe; allow the Windows Firewall prompt for
 Edgehop and Reach (they listen on the local network). Vitals asks to restart as

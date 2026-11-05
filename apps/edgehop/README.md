@@ -146,6 +146,64 @@ writes). Logs go to the unified log (subsystem `com.thiru.edgehop`; the window's
 Log panel shows the same lines). The build is ad-hoc signed: see
 `dist/READ-ME-FIRST.txt` for the first-launch steps.
 
+### Install on another Mac (and fix "it won't open")
+
+Needs **macOS 14 (Sonoma) or later**; the app runs natively on Apple silicon
+and Intel. Run these in Terminal on the Mac you are installing on:
+
+```bash
+# 1. Download the disk image (no GitHub sign-in needed)
+curl -L -o ~/Downloads/Edgehop-0.1.0.dmg \
+  https://github.com/r-thirumaran/mac-utility/raw/claude/busy-meitner-hqorah/releases/edgehop/Edgehop-0.1.0.dmg
+
+# 2. Mount it, copy the app to /Applications, unmount
+hdiutil attach ~/Downloads/Edgehop-0.1.0.dmg -nobrowse -mountpoint /tmp/edgehop-dmg
+pkill -x Edgehop; rm -rf /Applications/Edgehop.app
+cp -R /tmp/edgehop-dmg/Edgehop.app /Applications/
+hdiutil detach /tmp/edgehop-dmg
+
+# 3. Let macOS run it: clear the download quarantine and re-sign it for this Mac
+xattr -cr /Applications/Edgehop.app
+codesign --force --deep --sign - /Applications/Edgehop.app
+
+# 4. Start it
+open /Applications/Edgehop.app
+```
+
+Step 3 is the one that matters. The build is ad-hoc signed (not notarised by
+Apple), so without it macOS says the app "could not be verified", "is
+damaged and can't be opened", or silently refuses to start it.
+
+**It still looks like nothing happened?** Edgehop has **no Dock icon and no
+window on start**: it is the icon in the menu bar at the top right (on a
+crowded or notched menu bar it can be hidden behind the notch, so quit a few
+other menu-bar apps or use a menu-bar manager). Click it ▸ **Open Edgehop**.
+
+Check what is going on:
+
+| Check | Command | What you want to see |
+|---|---|---|
+| macOS version | `sw_vers -productVersion` | 14.0 or higher. Older macOS cannot run this build. |
+| Is it running? | `pgrep -lx Edgehop` | a process id and `Edgehop`. If yes, the app is up: look in the menu bar. |
+| Is it listening? | `lsof -nP -iTCP:24800 -sTCP:LISTEN` | a line with `Edgehop … TCP *:24800 (LISTEN)`. |
+| Signature OK? | `codesign --verify --deep --strict /Applications/Edgehop.app && echo OK` | `OK`. If not, repeat step 3. |
+| Quarantine gone? | `xattr -l /Applications/Edgehop.app` | no `com.apple.quarantine` line. |
+| Why it quit | `log show --last 5m --predicate 'process == "Edgehop" OR subsystem == "com.thiru.edgehop"' \| tail -40` | the error macOS or Edgehop logged. |
+| Run in the foreground | `/Applications/Edgehop.app/Contents/MacOS/Edgehop` | errors printed straight to Terminal (Ctrl+C to stop). |
+
+Still blocked:
+
+* **System Settings ▸ Privacy & Security** shows *"Edgehop" was blocked*:
+  click **Open Anyway**, enter your password, then open the app again.
+* **A work-managed Mac** (company VPN, Jamf/Intune/Kandji, CrowdStrike,
+  Santa, etc.) may refuse unsigned apps or the Accessibility and Input
+  Monitoring permissions whatever you do locally. If `pgrep` shows nothing
+  right after `open` and the log mentions a policy or "not allowed", the
+  block comes from your IT department: ask them to allow the app.
+* **Started from an old copy**: `pkill -x Edgehop`, delete
+  `/Applications/Edgehop.app`, and repeat steps 2–4. Only one Edgehop runs
+  per user, so a stale copy makes the new one quit at once.
+
 ### Permissions
 
 Edgehop needs two permissions. It asks for both on the first launch (macOS
