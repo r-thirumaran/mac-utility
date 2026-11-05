@@ -15,10 +15,12 @@ struct SettingsView: View {
                 .tabItem { Label("Shortcuts", systemImage: "keyboard") }
             clipboardTab
                 .tabItem { Label("Clipboard", systemImage: "doc.on.clipboard") }
+            PowerSettingsView()
+                .tabItem { Label("Power", systemImage: "bolt.batteryblock") }
             generalTab
                 .tabItem { Label("General", systemImage: "gearshape") }
         }
-        .frame(width: 520, height: 440)
+        .frame(width: 520, height: 500)
         .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
             accessibilityGranted = AccessibilityPermission.isTrusted
         }

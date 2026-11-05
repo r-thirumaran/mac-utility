@@ -29,9 +29,11 @@
 		ADB90BB10C80E163AC90A4DD /* ClipItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEAC132EAE2B7916C319692C /* ClipItem.swift */; };
 		BFB46300D6418D3C276E535F /* AccessibilityPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FCED5A505D0757AB6FF08C4 /* AccessibilityPermission.swift */; };
 		C066C5BC081C275E15EEA494 /* HotKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C93D0D4066B888FD01400B /* HotKeyManager.swift */; };
+		D6FFE23502A167874A0EE5FF /* PowerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D580B8842DC0F2339490E6D5 /* PowerManager.swift */; };
 		DCD7D35D780215637E2A8CBD /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 700D585CF9912B83BD4BED93 /* AppDelegate.swift */; };
 		E4BBBD82ED9B8FF4E86E6E79 /* WindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4766EBEA92536A5C356EFBAE /* WindowManager.swift */; };
 		EB3EE182EDE6CBAB1E61D961 /* AXWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBFCAF4EBECEDD65DD9AF573 /* AXWindow.swift */; };
+		F12F6EC9509651182B2052C3 /* PowerSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 434025E5955ED81DD9105174 /* PowerSettingsView.swift */; };
 		F1860572D9572CCF4692AAF3 /* Paster.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CD2BA3E2C15721B4FAEA5CF /* Paster.swift */; };
 /* End PBXBuildFile section */
 
@@ -46,6 +48,7 @@
 		3425AD6AE68EA1C45E04F67D /* ScreenshotWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotWatcher.swift; sourceTree = "<group>"; };
 		3CD2BA3E2C15721B4FAEA5CF /* Paster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Paster.swift; sourceTree = "<group>"; };
 		3FCED5A505D0757AB6FF08C4 /* AccessibilityPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityPermission.swift; sourceTree = "<group>"; };
+		434025E5955ED81DD9105174 /* PowerSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerSettingsView.swift; sourceTree = "<group>"; };
 		44A262917E74BF34D02DFBA0 /* ClipboardMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardMonitor.swift; sourceTree = "<group>"; };
 		4766EBEA92536A5C356EFBAE /* WindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowManager.swift; sourceTree = "<group>"; };
 		54C3E9A4500BA8FF344E7954 /* FrontmostAppTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmostAppTracker.swift; sourceTree = "<group>"; };
@@ -60,6 +63,7 @@
 		C714BAD9D21A976EB546226F /* PermissionWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionWindowController.swift; sourceTree = "<group>"; };
 		C8C340DED7EF7934F956838A /* FrameStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameStore.swift; sourceTree = "<group>"; };
 		CBFCAF4EBECEDD65DD9AF573 /* AXWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXWindow.swift; sourceTree = "<group>"; };
+		D580B8842DC0F2339490E6D5 /* PowerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerManager.swift; sourceTree = "<group>"; };
 		E09ED2D63AC79E18019D01E1 /* KeyCombo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyCombo.swift; sourceTree = "<group>"; };
 		E41E12925B84F764D6E649CA /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		ED878A58A893B25DF87B44CA /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
@@ -122,6 +126,15 @@
 			path = Persistence;
 			sourceTree = "<group>";
 		};
+		EED805CDD6C3A5EA364CB7EF /* Power */ = {
+			isa = PBXGroup;
+			children = (
+				D580B8842DC0F2339490E6D5 /* PowerManager.swift */,
+				434025E5955ED81DD9105174 /* PowerSettingsView.swift */,
+			);
+			path = Power;
+			sourceTree = "<group>";
+		};
 		D0CA17BBA4161446FC3D6EE6 /* Settings */ = {
 			isa = PBXGroup;
 			children = (
@@ -151,6 +164,7 @@
 				C328C89E0C31F3A4F1C7CF59 /* Clipboard */,
 				60E9FE93B4DC7F501074EF05 /* Hotkeys */,
 				60007F2925DEA5C892005D77 /* Persistence */,
+				EED805CDD6C3A5EA364CB7EF /* Power */,
 				D0CA17BBA4161446FC3D6EE6 /* Settings */,
 				26FB2199EE33D1E00BB93637 /* WindowManagement */,
 			);
@@ -269,6 +283,8 @@
 				10CEF16042350778FC69BF36 /* HotKeyRecorderView.swift in Sources */,
 				A099EDE57F2D4742886232AB /* KeyCombo.swift in Sources */,
 				22FBE89FE4E6377D4BA74883 /* Storage.swift in Sources */,
+				D6FFE23502A167874A0EE5FF /* PowerManager.swift in Sources */,
+				F12F6EC9509651182B2052C3 /* PowerSettingsView.swift in Sources */,
 				803F420E09078DF6A31DA3AD /* LaunchAtLogin.swift in Sources */,
 				39D399E5D74A64F068C8B850 /* Preferences.swift in Sources */,
 				80E30B41C29A21F791D87ED6 /* SettingsView.swift in Sources */,

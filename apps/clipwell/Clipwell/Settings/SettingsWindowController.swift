@@ -10,7 +10,7 @@ final class SettingsWindowController: NSWindowController {
 
     convenience init(preferences: Preferences, store: ClipboardStore) {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 440),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 500),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false)
