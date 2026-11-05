@@ -317,3 +317,37 @@ func TestIntegrationBoundaryHopAndLocate(t *testing.T) {
 	a.key(keymap.ModLeftAlt, false)
 	a.key(keymap.ModLeftControl, false)
 }
+
+// A wobble back toward the edge just crossed must not bounce control straight
+// back; a deliberate return (after moving ReentryGuardPx in) still hops.
+func TestIntegrationNoBounceBack(t *testing.T) {
+	a := newMachine(t, "Left")
+	b := newMachine(t, "Right", Display{ID: "r1", X: 0, Y: 0, W: 2560, H: 1440, Scale: 2, Primary: true})
+	startNet(t, a, "windows")
+	startNet(t, b, "macos")
+	pair(t, a, b)
+	waitFor(t, "displays exchanged", func() bool {
+		sa, sb := a.node.State(), b.node.State()
+		return len(sa.Peers) == 1 && len(sa.Peers[0].Displays) == 1 && len(sb.Peers) == 1 && len(sb.Peers[0].Displays) == 1
+	})
+	setRowLayout(t, a, b)
+
+	a.dev.SetCursor(1900, 270)
+	a.move(5000, 0)
+	waitFor(t, "B active", func() bool { return b.active() == b.ID() && a.active() == b.ID() })
+	waitMoveTo(t, b, 1, 270)
+
+	// Hand wobbles 3 px back: B's cursor is clamped onto its left edge (x 0).
+	a.move(-3, 0)
+	waitFor(t, "wobble injected on B", func() bool { return b.count("MoveRelative") == 1 })
+	time.Sleep(150 * time.Millisecond)
+	if b.active() != b.ID() || a.active() != b.ID() {
+		t.Fatalf("control bounced back after a 3 px wobble: a=%s b=%s", a.active(), b.active())
+	}
+
+	// Move well inside, then deliberately back across: control returns to A.
+	a.move(ReentryGuardPx+20, 0)
+	waitFor(t, "moved in on B", func() bool { return b.count("MoveRelative") == 2 })
+	a.move(-500, 0)
+	waitFor(t, "A active again", func() bool { return a.active() == a.ID() && b.active() == a.ID() })
+}

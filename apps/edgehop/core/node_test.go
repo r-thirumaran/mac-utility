@@ -151,6 +151,9 @@ func TestStubCornersButtonsAndOfflineNeighbour(t *testing.T) {
 	if a.active() != a.ID() {
 		t.Fatal("switched with a button held")
 	}
+	// Release away from the edge: releasing ON a boundary edge rightly switches,
+	// and this test only passed before because control then bounced straight back.
+	a.dev.SetCursor(1900, 540)
 	a.dev.Emit(input.Event{Kind: input.MouseButton, Button: input.ButtonLeft, Down: false, ClickCount: 1})
 	// Left edge has no neighbour.
 	a.dev.SetCursor(100, 540)

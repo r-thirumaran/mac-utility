@@ -172,6 +172,8 @@ type Node struct {
 	mods              uint8 // physical modifiers held (HID byte)
 	edgePending       Edge
 	edgeSince         time.Time
+	entryEdge         Edge  // edge control arrived through; disarmed until the cursor leaves it (ReentryGuardPx)
+	entryPoint        Point // where the cursor was placed on arrival
 	edgeTimer         *time.Timer
 	lastNamedActive   time.Time
 	lastRemoteInput   time.Time
@@ -935,6 +937,10 @@ func (n *Node) becomeActiveLocal(enter *Enter, buttons, mods uint8) {
 		p = Centre(n.displays)
 	}
 	n.lastCursor = p
+	n.entryEdge, n.entryPoint = "", p
+	if enter != nil && enter.Edge.Valid() {
+		n.entryEdge = enter.Edge
+	}
 	cap, inj := n.cfg.Capturer, n.cfg.Injector
 	n.after(func() {
 		if cap != nil {
@@ -1182,6 +1188,13 @@ func (n *Node) checkEdge(p Point) {
 		return
 	}
 	hop, ok := HopAt(p, n.displays, me, n.boundaries(), n.settings.EdgeCornerDeadZonePx)
+	if n.entryEdge != "" {
+		if awayFromEdge(n.entryEdge, n.entryPoint, p) >= ReentryGuardPx {
+			n.entryEdge = ""
+		} else if ok && hop.Edge == n.entryEdge {
+			ok = false // just arrived through this edge: a small wobble back must not bounce control
+		}
+	}
 	if !ok || !n.peerOnline(hop.Target) || n.buttons != 0 {
 		n.edgePending = ""
 		return
@@ -1202,6 +1215,25 @@ func (n *Node) checkEdge(p Point) {
 	}
 	pt := hop.Pt
 	n.handOver(hop.Target, &Enter{Edge: hop.Enter, Frac: hop.Frac, Pt: &pt})
+}
+
+// ReentryGuardPx is how far the cursor must move away from the edge it arrived
+// through before that edge can hand control back (protocol §6.3).
+const ReentryGuardPx = 40
+
+// awayFromEdge is how far p has moved from the arrival point a, inward from edge e.
+func awayFromEdge(e Edge, a, p Point) int {
+	switch e {
+	case EdgeLeft:
+		return p.X - a.X
+	case EdgeRight:
+		return a.X - p.X
+	case EdgeTop:
+		return p.Y - a.Y
+	case EdgeBottom:
+		return a.Y - p.Y
+	}
+	return ReentryGuardPx
 }
 
 // edgeTimerFired re-checks the edge once the switch delay elapsed.

@@ -230,6 +230,8 @@ on (`claim`).
   * A machine whose displays are unknown contributes no display to the canvas, so it can never overlap another machine.
 * An unknown control `t` MUST be **ignored** (no `error`, no close) so later additions such as `locate` are additive. This is the opposite of an unknown frame **type** byte, which is still an `error` + close (§7).
 * Edge geometry: the right/bottom edge is the last pixel column/row (where the OS clamps the cursor); left/top is `≤ minX/minY`. The corner dead zone is measured along the merged run of displays that touch that edge, so a join between two monitors on one edge is not a corner.
+* Re-entry guard: after becoming active through `enter.edge`, that edge cannot hand control back until the cursor has moved 40 px (`ReentryGuardPx`) inward from the arrival point, so a wobble or a stray first delta does not bounce control.
+* Warp in the first delta (macOS sender): parking the cursor at the centre can be folded into the next reported mouse delta; the sender removes it from the first forwarded delta that clearly contains it (same sign, at least half its size, within 0.5 s).
 * Only the machine that was active locks and hides its cursor when control leaves it.
 * Peer vanished (15 s silence or a closed socket): control returns to a machine only if it had forwarded to or handed to that peer (it then sends `claim`); otherwise it reverts to itself silently.
 * Clipboard is sent only by the hand-over side, to the new active machine, only when it holds non-empty text.

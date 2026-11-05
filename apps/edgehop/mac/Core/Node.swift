@@ -92,6 +92,16 @@ final class Node {
     private var mods: UInt8 = 0
     private var edgePending: Edge?
     private var edgeSince = Date.distantPast
+    /// Edge control arrived through; it cannot hand control back until the cursor has moved
+    /// `Node.reentryGuard` points away from it, so a small wobble does not bounce control.
+    private var entryEdge: Edge?
+    private var entryPoint = Geometry.Point(x: 0, y: 0)
+    static let reentryGuard = 40
+    /// Where this Mac's cursor was when it parked it at the centre on handing control away.
+    /// macOS can fold that warp into the next reported mouse delta; `forward` takes it back
+    /// out so the first move sent to the new machine is the hand's, not the warp's.
+    private var lastLocalPoint = Geometry.Point(x: 0, y: 0)
+    private var warpCompensation: (dx: Int, dy: Int, at: Date)?
     private var edgeTimer: DispatchWorkItem?
     private var lastNamedActive = Date.distantPast
     private var lastRemoteInput: Date?
@@ -590,7 +600,9 @@ final class Node {
         if wasSelf {
             releaseModifiers()
             if settings.lockCursorWhileRemote, let device = config.device {
-                device.lockCursor(true, centre: Geometry.centre(displays))
+                let centre = Geometry.centre(displays)
+                warpCompensation = (centre.x - lastLocalPoint.x, centre.y - lastLocalPoint.y, Date())
+                device.lockCursor(true, centre: centre)
             }
         }
     }
@@ -610,6 +622,8 @@ final class Node {
         } else {
             point = Geometry.centre(displays)
         }
+        entryEdge = enter?.edge
+        entryPoint = point
         guard let device = config.device else { return }
         device.lockCursor(false, centre: Geometry.centre(displays))
         device.moveTo(x: point.x, y: point.y)
@@ -754,12 +768,34 @@ final class Node {
         send(Wire.Locate(), to: active)
     }
 
+    /// Takes a pending warp out of the first mouse delta after parking the cursor, but only
+    /// when that delta clearly contains it (same direction, at least half its size on that
+    /// axis); a delta without the warp passes through untouched. Kept until a delta contains it,
+    /// or dropped after 0.5 s.
+    /// Example: parked from x 3359 to 1680 → compensation dx −1679; next delta −1655 → +24.
+    static func removeWarp(dx: Int, dy: Int,
+                           compensation: inout (dx: Int, dy: Int, at: Date)?) -> (Int, Int) {
+        guard let warp = compensation else { return (dx, dy) }
+        guard Date().timeIntervalSince(warp.at) < 0.5 else {
+            compensation = nil
+            return (dx, dy)
+        }
+        func contains(_ d: Int, _ w: Int) -> Bool {
+            w != 0 && d.signum() == w.signum() && abs(d) * 2 >= abs(w)
+        }
+        let hitX = contains(dx, warp.dx), hitY = contains(dy, warp.dy)
+        guard hitX || hitY else { return (dx, dy) }   // an in-flight move from before the park
+        compensation = nil
+        return (hitX ? dx - warp.dx : dx, hitY ? dy - warp.dy : dy)
+    }
+
     private func forward(_ event: InputEvent) {
         let frame: Data
         switch event.kind {
         case .mouseMove:
-            if event.dx == 0 && event.dy == 0 { return }
-            frame = Wire.mouseMove(dx: event.dx, dy: event.dy)
+            let (dx, dy) = Node.removeWarp(dx: event.dx, dy: event.dy, compensation: &warpCompensation)
+            if dx == 0 && dy == 0 { return }
+            frame = Wire.mouseMove(dx: dx, dy: dy)
         case .mouseButton:
             frame = Wire.mouseButton(button: event.button, down: event.down, clicks: event.clickCount)
         case .scroll:
@@ -782,8 +818,24 @@ final class Node {
     /// faces it, so control hops to the machine on the other side. The timer, the switch delay
     /// and the "no buttons held" rule are unchanged.
     private func checkEdge(_ p: Geometry.Point) {
-        guard let hop = Geometry.hop(world: world(), machine: id, point: p,
-                                     deadZone: settings.edgeCornerDeadZonePx) else {
+        lastLocalPoint = p
+        var found = Geometry.hop(world: world(), machine: id, point: p,
+                                 deadZone: settings.edgeCornerDeadZonePx)
+        if let arrived = entryEdge {
+            let away: Int
+            switch arrived {
+            case .left: away = p.x - entryPoint.x
+            case .right: away = entryPoint.x - p.x
+            case .top: away = p.y - entryPoint.y
+            case .bottom: away = entryPoint.y - p.y
+            }
+            if away >= Node.reentryGuard {
+                entryEdge = nil
+            } else if found?.edge == arrived {
+                found = nil
+            }
+        }
+        guard let hop = found else {
             edgePending = nil
             return
         }
