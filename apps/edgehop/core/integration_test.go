@@ -303,6 +303,10 @@ func TestIntegrationBoundaryHopAndLocate(t *testing.T) {
 	a.key(keymap.ModLeftAlt, false)
 	a.key(keymap.ModLeftControl, false)
 	a.clock.Advance(ShakeCooldown)
+	// The claim put the pointer back where it was when control left, i.e. on
+	// the boundary edge (§6.3); shake well inside, or the shake itself pushes
+	// the pointer across again.
+	a.dev.SetCursor(960, 400)
 	a.shake()
 	waitFor(t, "locate overlay on A", func() bool { return a.loc.count() == 1 })
 

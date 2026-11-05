@@ -16,6 +16,9 @@ struct EdgehopSettings: Codable, Equatable {
     /// Trackpad gestures on this Mac are recognised, swallowed here and sent to the machine in
     /// control as the equivalent shortcut (`GestureTranslator`).
     var translateGestures: Bool
+    /// Spec §6.3: using this machine's own mouse or trackpad brings the pointer back here,
+    /// unless this machine is the one driving the active machine.
+    var touchToReclaim: Bool
     var port: Int
 
     static let defaults = EdgehopSettings(switchDelayMs: 0,
@@ -26,6 +29,7 @@ struct EdgehopSettings: Codable, Equatable {
                                           lockCursorWhileRemote: true,
                                           shakeToLocate: true,
                                           translateGestures: true,
+                                          touchToReclaim: true,
                                           port: 24800)
 
     init(switchDelayMs: Int,
@@ -36,6 +40,7 @@ struct EdgehopSettings: Codable, Equatable {
          lockCursorWhileRemote: Bool,
          shakeToLocate: Bool = true,
          translateGestures: Bool = true,
+         touchToReclaim: Bool = true,
          port: Int) {
         self.switchDelayMs = switchDelayMs
         self.edgeCornerDeadZonePx = edgeCornerDeadZonePx
@@ -45,6 +50,7 @@ struct EdgehopSettings: Codable, Equatable {
         self.lockCursorWhileRemote = lockCursorWhileRemote
         self.shakeToLocate = shakeToLocate
         self.translateGestures = translateGestures
+        self.touchToReclaim = touchToReclaim
         self.port = port
     }
 
@@ -52,7 +58,7 @@ struct EdgehopSettings: Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case switchDelayMs, edgeCornerDeadZonePx, swapCmdCtrl, clipboardSync, hotkeySwitch, lockCursorWhileRemote
-        case shakeToLocate, translateGestures, port
+        case shakeToLocate, translateGestures, touchToReclaim, port
     }
 
     /// Missing keys take the defaults (a partial object from `edgehop.settings.set` or an
@@ -68,6 +74,7 @@ struct EdgehopSettings: Codable, Equatable {
         lockCursorWhileRemote = try container.decodeIfPresent(Bool.self, forKey: .lockCursorWhileRemote) ?? d.lockCursorWhileRemote
         shakeToLocate = try container.decodeIfPresent(Bool.self, forKey: .shakeToLocate) ?? d.shakeToLocate
         translateGestures = try container.decodeIfPresent(Bool.self, forKey: .translateGestures) ?? d.translateGestures
+        touchToReclaim = try container.decodeIfPresent(Bool.self, forKey: .touchToReclaim) ?? d.touchToReclaim
         port = try container.decodeIfPresent(Int.self, forKey: .port) ?? d.port
     }
 
@@ -81,6 +88,7 @@ struct EdgehopSettings: Codable, Equatable {
         try container.encode(lockCursorWhileRemote, forKey: .lockCursorWhileRemote)
         try container.encode(shakeToLocate, forKey: .shakeToLocate)
         try container.encode(translateGestures, forKey: .translateGestures)
+        try container.encode(touchToReclaim, forKey: .touchToReclaim)
         try container.encode(port, forKey: .port)
     }
 

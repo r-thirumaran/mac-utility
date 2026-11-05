@@ -441,3 +441,8 @@ func (n *stubNet) disconnect(a, b string) {
 		nb.PeerDown(a)
 	}
 }
+
+// button feeds a physical mouse button press or release.
+func (m *machine) button(b input.Button, down bool) bool {
+	return m.dev.Emit(input.Event{Kind: input.MouseButton, Button: b, Down: down, ClickCount: 1})
+}

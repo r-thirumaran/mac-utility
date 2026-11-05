@@ -42,6 +42,12 @@ directly.
   machine that keyboard is attached to. **Ctrl+Alt+←/→/↑/↓** moves control to
   the neighbour in that direction without touching the mouse. The tray/menu
   bar menu has *Switch to …* entries too.
+* **Touch a machine's own mouse.** Moving or clicking the mouse or trackpad of
+  the machine you are sitting at brings the pointer straight back to it, where
+  you left it on that screen — no hotkey, no pushing across edges. The one
+  exception is the machine whose mouse is driving the pointer right now: that
+  hand is already in charge, so it keeps driving instead (Settings ▸ *Touch
+  this computer's mouse to bring the pointer back*).
 * **Clipboard.** When control moves, the text clipboard goes with it (switch
   this off in Settings if you prefer).
 * **Lost the pointer?** Shake the mouse left and right quickly: a ring
@@ -82,6 +88,7 @@ on a paired machine can move your mouse and type on yours.
 | Sync clipboard | Text clipboard follows the pointer. |
 | Hotkey | The modifiers held with ←/→/↑/↓ (move control) and Home (bring it back). |
 | Hide the pointer here | Park and hide this machine's pointer while it is on another machine. |
+| Touch this computer's mouse to bring the pointer back | Using this machine's own mouse or trackpad (about 24 px of travel, or any click) takes the pointer back here, to where it was when it left. Not while this machine is the one driving the pointer elsewhere; keyboard input never reclaims. On by default. |
 | Send trackpad gestures to the other computer | Recognise Magic Trackpad gestures while the pointer is on another machine and send that machine's own shortcut instead of acting here. On by default; see [Trackpad gestures](#trackpad-gestures). |
 | Launch at login | Start Edgehop when you sign in (Windows: `HKCU\…\Run`; macOS: Login Items). |
 | Port | The TCP port other machines connect to (default 24800; 0 = any free port). Changing it takes effect after a restart. |

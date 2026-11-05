@@ -574,10 +574,13 @@ func TestStubForwardingOwnMouseParksPointer(t *testing.T) {
 	}
 	waitFor(t, "layout on B", func() bool { return len(b.node.Layout().Machines) == 2 })
 
-	// B is told A is active without ever having been active itself.
+	// B is told A is active without ever having been active itself, and is
+	// the machine driving it (otherwise its own mouse would take the pointer
+	// back instead of forwarding: TestStubTouchToReclaim).
 	b.node.mu.Lock()
 	b.node.active = a.ID()
 	b.node.cursorParked = false
+	b.node.driving = true
 	b.node.mu.Unlock()
 	if b.dev.Locked() {
 		t.Fatal("precondition: B's pointer already locked")
@@ -593,4 +596,161 @@ func TestStubForwardingOwnMouseParksPointer(t *testing.T) {
 	b.move(7, 3)
 	waitFor(t, "B parks its pointer while its mouse drives A", b.dev.Locked)
 	waitFor(t, "the move still reaches A", func() bool { return a.count("MoveRelative") >= 1 })
+}
+
+// touchSetup makes B active and driven by C, so A is neither active nor
+// driving: the state in which A's own mouse may take the pointer back (§6.3).
+// A's pointer sat at (702,400) when control left it.
+func touchSetup(t *testing.T) (a, b, c *machine) {
+	t.Helper()
+	_, ms := stubMachines(t, "linux", "linux", "linux")
+	a, b, c = ms[0], ms[1], ms[2]
+	if err := a.node.SetLayout(rowLayout(a, b, c)); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range []*machine{b, c} {
+		m := m
+		waitFor(t, "layout on "+m.name, func() bool { return len(m.node.Layout().Machines) == 3 })
+	}
+	a.dev.SetCursor(700, 400)
+	a.move(2, 0)
+	// C pushes its own pointer left onto B: B is active, C drives it, and A
+	// was merely told about it.
+	c.dev.SetCursor(20, 540)
+	c.move(-5000, 0)
+	waitFor(t, "B active", func() bool { return a.active() == b.ID() && b.active() == b.ID() && c.active() == b.ID() })
+	waitFor(t, "A parked", a.dev.Locked)
+	if n := b.count("MoveRelative"); n != 0 {
+		t.Fatalf("B received %d moves before the test started", n)
+	}
+	return a, b, c
+}
+
+// §6.3 touch to reclaim: a deliberate move of A's own mouse brings the
+// pointer back to A, where it was when control left; a small bump does not,
+// and neither reaches the machine that had control.
+func TestStubTouchToReclaim(t *testing.T) {
+	a, b, _ := touchSetup(t)
+
+	// A 10 px bump is not a deliberate touch, in one window or across two.
+	a.move(10, 0)
+	a.clock.Advance(TouchReclaimWindow + 10*time.Millisecond)
+	a.move(0, 10)
+	time.Sleep(30 * time.Millisecond)
+	if a.active() != b.ID() {
+		t.Fatal("a 10 px bump took control back")
+	}
+	if n := b.count("MoveRelative"); n != 0 {
+		t.Fatalf("a bump on a machine that is not driving reached B (%d moves)", n)
+	}
+
+	// A deliberate 30 px move does take it back, to where A's pointer was.
+	a.move(30, 0)
+	waitFor(t, "A active", func() bool { return a.active() == a.ID() && b.active() == a.ID() })
+	waitMoveTo(t, a, 702, 400)
+	if n := b.count("MoveRelative"); n != 0 {
+		t.Fatalf("the triggering move was delivered to B (%d moves)", n)
+	}
+	if a.dev.Locked() {
+		t.Fatal("A's pointer is still parked after reclaiming")
+	}
+}
+
+// A press of A's own button reclaims straight away, and its release is
+// swallowed with it so no machine sees an unmatched up (§6.3).
+func TestStubTouchToReclaimButton(t *testing.T) {
+	a, b, _ := touchSetup(t)
+	if !a.button(input.ButtonLeft, true) {
+		t.Fatal("the triggering button-down must be swallowed")
+	}
+	waitFor(t, "A active", func() bool { return a.active() == a.ID() && b.active() == a.ID() })
+	if !a.button(input.ButtonLeft, false) {
+		t.Fatal("the matching button-up must be swallowed too")
+	}
+	if n := b.count("Button"); n != 0 {
+		t.Fatalf("B saw %d button events from a machine that was not driving it", n)
+	}
+	if n := a.count("Button"); n != 0 {
+		t.Fatalf("A injected %d button events of its own physical press", n)
+	}
+	// A press after reclaiming is A's own again: nothing is swallowed.
+	if a.button(input.ButtonLeft, true) {
+		t.Fatal("a press on the active machine must not be swallowed")
+	}
+	a.button(input.ButtonLeft, false)
+}
+
+// With the setting off the old behaviour stands: A's own mouse drives the
+// active machine instead of taking the pointer back.
+func TestStubTouchToReclaimOff(t *testing.T) {
+	a, b, _ := touchSetup(t)
+	s := a.node.Settings()
+	s.TouchToReclaim = false
+	if err := a.node.SetSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	a.move(30, 0)
+	waitFor(t, "the move reaches B", func() bool { return b.count("MoveRelative") == 1 })
+	if a.active() != b.ID() {
+		t.Fatal("A took control back although touch to reclaim is off")
+	}
+}
+
+// §6.3: the machine driving the active machine never reclaims — not while it
+// forwards, and not when its own input hops control further on (a chained hop
+// within DrivingGrace).
+func TestStubTouchToReclaimNotWhileDriving(t *testing.T) {
+	_, ms := stubMachines(t, "linux", "linux", "linux")
+	a, b, c := ms[0], ms[1], ms[2]
+	if err := a.node.SetLayout(rowLayout(a, b, c)); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range []*machine{b, c} {
+		m := m
+		waitFor(t, "layout on "+m.name, func() bool { return len(m.node.Layout().Machines) == 3 })
+	}
+	// A's own pointer hops control to B, so A drives B: it keeps forwarding.
+	a.dev.SetCursor(1900, 540)
+	a.move(5000, 0)
+	waitFor(t, "B active", func() bool { return a.active() == b.ID() && b.active() == b.ID() })
+	a.move(12, 0)
+	waitFor(t, "the move reaches B", func() bool { return b.count("MoveRelative") == 1 })
+	if a.active() != b.ID() {
+		t.Fatal("A's own mouse took the pointer back while it was driving B")
+	}
+	// The same hand pushes on from B to C: the chained hop is A's own, so A
+	// keeps driving and forwards to C instead of reclaiming.
+	a.move(5000, 0)
+	waitFor(t, "C active", func() bool { return a.active() == c.ID() && c.active() == c.ID() })
+	a.move(9, 0)
+	waitFor(t, "the move reaches C", func() bool {
+		cc, ok := c.lastCall("MoveRelative")
+		return ok && cc.Args[0] == 9
+	})
+	if a.active() != c.ID() {
+		t.Fatal("A's own mouse took the pointer back after a hop it caused itself")
+	}
+}
+
+// The timing rule behind that: an `active` arriving later than DrivingGrace
+// after this machine last forwarded physical input is somebody else's hop, so
+// it stops driving and its mouse may reclaim again (§6.3).
+func TestNodeDrivingGrace(t *testing.T) {
+	_, ms := stubMachines(t, "linux", "linux")
+	a, b := ms[0], ms[1]
+	n := a.node
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.active, n.driving = b.ID(), true
+	n.lastPhysForward, n.lastPhysForwardTo = a.clock.Now(), b.ID()
+	n.drivingHandedOver("third-machine")
+	if !n.driving {
+		t.Fatal("a chained hop within the grace took this machine out of the driving seat")
+	}
+	n.driving = true
+	a.clock.Advance(DrivingGrace + time.Millisecond)
+	n.drivingHandedOver("third-machine")
+	if n.driving {
+		t.Fatal("still driving although the last forward is older than the grace")
+	}
 }

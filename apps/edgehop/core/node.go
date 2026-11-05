@@ -172,9 +172,16 @@ type Node struct {
 	mods              uint8 // physical modifiers held (HID byte)
 	edgePending       Edge
 	edgeSince         time.Time
-	entryEdge         Edge  // edge control arrived through; disarmed until the cursor leaves it (ReentryGuardPx)
-	entryPoint        Point // where the cursor was placed on arrival
-	cursorParked      bool  // own pointer locked while this machine's mouse drives another
+	entryEdge         Edge   // edge control arrived through; disarmed until the cursor leaves it (ReentryGuardPx)
+	entryPoint        Point  // where the cursor was placed on arrival
+	cursorParked      bool   // own pointer locked while this machine's mouse drives another
+	homePoint         *Point // where this machine's pointer was when control left it (§6.3)
+	driving           bool   // this machine's own input is what drives the active machine (§6.3)
+	lastPhysForward   time.Time
+	lastPhysForwardTo string
+	touchSince        time.Time // start of the touch-to-reclaim travel window
+	touchTravel       int
+	swallowedButtons  uint8 // button-downs swallowed by touch-to-reclaim, whose up must go too
 	edgeTimer         *time.Timer
 	lastNamedActive   time.Time
 	lastRemoteInput   time.Time
@@ -666,7 +673,7 @@ func (n *Node) peerGone(id string) {
 	}
 	// Nobody here forwarded to it: revert to the start state silently.
 	n.active = n.cfg.ID
-	n.becomeActiveLocal(nil, 0, 0)
+	n.becomeActiveLocal(nil, 0, 0, false)
 }
 
 // Discovered records a machine seen on the network (Bonjour or a manual
@@ -731,7 +738,7 @@ func (n *Node) Forget(id string) error {
 	}
 	if n.active == id {
 		n.active = n.cfg.ID
-		n.becomeActiveLocal(nil, 0, 0)
+		n.becomeActiveLocal(nil, 0, 0, false)
 	}
 	if n.cfg.Transport != nil {
 		n.after(func() { n.cfg.Transport.Disconnect(id) })
@@ -825,10 +832,11 @@ func (n *Node) handleControl(p *peerState, msg Message) {
 		}
 		n.seq = m.Seq
 		n.lastHandoverFrom = m.From
+		n.drivingHandedOver(m.ID)
 		if n.isSelf(m.ID) {
 			n.logf("info", "control arrived from %s", n.peerName(m.From))
 			n.active = n.cfg.ID
-			n.becomeActiveLocal(m.Enter, m.Buttons, m.Modifiers)
+			n.becomeActiveLocal(m.Enter, m.Buttons, m.Modifiers, false)
 		} else {
 			n.setRemoteActive(m.ID)
 		}
@@ -848,9 +856,10 @@ func (n *Node) handleControl(p *peerState, msg Message) {
 			id = p.id
 		}
 		n.lastHandoverFrom = p.id
+		n.drivingHandedOver(id)
 		if n.isSelf(id) {
 			n.active = n.cfg.ID
-			n.becomeActiveLocal(nil, 0, 0)
+			n.becomeActiveLocal(nil, 0, 0, true)
 		} else {
 			n.logf("info", "%s took control", n.peerName(id))
 			n.setRemoteActive(id)
@@ -915,6 +924,11 @@ func (n *Node) setRemoteActive(id string) {
 	n.forwardedToActive = false
 	n.edgePending = ""
 	if wasSelf {
+		// Remember where the pointer sat here, so touch-to-reclaim or
+		// Ctrl+Alt+Home puts it back exactly there (§6.3).
+		p := n.lastCursor
+		n.homePoint = &p
+		n.resetTouchTravel()
 		n.releaseModifiers()
 		if n.settings.LockCursorWhileRemote && n.cfg.Capturer != nil {
 			n.cursorParked = true
@@ -940,26 +954,126 @@ func (n *Node) parkForForwarding(ev input.Event) {
 	n.after(func() { cap.LockCursor(true) })
 }
 
+// Touch to reclaim (protocol §6.3): using a machine's own mouse or trackpad
+// brings the pointer back to that machine, unless that machine is the one
+// driving the active machine.
+const (
+	// TouchReclaimPx is the travel (|dx|+|dy|) that counts as a deliberate
+	// touch of this machine's own mouse.
+	TouchReclaimPx = 24
+	// TouchReclaimWindow is how long that travel may take to add up.
+	TouchReclaimWindow = 500 * time.Millisecond
+	// DrivingGrace is how long after forwarding physical mouse input this
+	// machine still counts as driving when the active machine changes under
+	// it (a chained hop it caused itself).
+	DrivingGrace = 750 * time.Millisecond
+)
+
+func (n *Node) resetTouchTravel() {
+	n.touchTravel = 0
+	n.touchSince = time.Time{}
+}
+
+// stillDriving reports whether an `active`/`claim` that moves control away
+// from n.active was caused by this machine's own mouse: it forwarded physical
+// mouse input to the machine control is leaving, moments ago (§6.3).
+func (n *Node) stillDriving() bool {
+	if !n.driving || n.lastPhysForward.IsZero() || n.lastPhysForwardTo != n.active {
+		return false
+	}
+	return n.now().Sub(n.lastPhysForward) <= DrivingGrace
+}
+
+// drivingHandedOver is called before n.active changes because of an `active`
+// or `claim` from another machine: this machine stops driving unless the hop
+// is one its own mouse caused (§6.3).
+func (n *Node) drivingHandedOver(newActive string) {
+	if newActive == n.active || n.stillDriving() {
+		return
+	}
+	n.driving = false
+}
+
+// touchReclaim implements §6.3 on a machine that is not active and not
+// driving: enough movement of its own mouse, or a press of its own button,
+// takes control back. The triggering events are swallowed, so the machine
+// that had control never sees them; the matching up of a swallowed down is
+// swallowed too. Keyboard input never reclaims (it follows the pointer).
+func (n *Node) touchReclaim(ev input.Event) bool {
+	if !n.settings.TouchToReclaim || n.driving {
+		return false
+	}
+	switch ev.Kind {
+	case input.MouseMove:
+		now := n.now()
+		if n.touchSince.IsZero() || now.Sub(n.touchSince) > TouchReclaimWindow {
+			n.touchSince, n.touchTravel = now, 0
+		}
+		n.touchTravel += abs(ev.DX) + abs(ev.DY)
+		if n.touchTravel < TouchReclaimPx {
+			return true // not a deliberate touch yet, but not the remote's either
+		}
+		n.logf("info", "own mouse moved here: taking the pointer back")
+		n.claimSelf()
+		return true
+	case input.MouseButton:
+		if !ev.Down {
+			return false // handled in localInput, which sees the ups too
+		}
+		n.swallowedButtons |= buttonBit(ev.Button)
+		n.logf("info", "own button pressed here: taking the pointer back")
+		n.claimSelf()
+		return true
+	}
+	return false
+}
+
+// armReentryGuard arms the re-entry guard at p: the pointer put back where it
+// was when control left usually lands on the very edge it was pushed against,
+// which must not hand control straight back again (§6.3). That edge is
+// disarmed once the pointer has moved ReentryGuardPx away from it.
+func (n *Node) armReentryGuard(p Point) {
+	me, placed := n.layout.Placement(n.cfg.ID)
+	if !placed {
+		return
+	}
+	if hop, ok := HopAt(p, n.displays, me, n.boundaries(), n.settings.EdgeCornerDeadZonePx); ok {
+		n.entryEdge = hop.Edge
+	}
+}
+
 // becomeActiveLocal performs §6.1 rule 4 after n.active was set to self.
-func (n *Node) becomeActiveLocal(enter *Enter, buttons, mods uint8) {
+// home says this machine took control back itself (a claim: touch-to-reclaim
+// or Ctrl+Alt+Home), in which case the pointer goes back where it was when
+// control left (§6.3) instead of to the centre.
+func (n *Node) becomeActiveLocal(enter *Enter, buttons, mods uint8, home bool) {
 	n.lastNamedActive = n.now()
 	n.forwardedToActive = false
+	n.driving = false
+	n.resetTouchTravel()
 	n.edgePending = ""
 	var p Point
+	wentHome := false
 	switch {
 	case enter != nil && enter.Pt != nil:
 		// Layout v2: the sender computed the exact point on the canvas.
 		p = SnapToDisplays(*enter.Pt, n.displays)
 	case enter != nil && enter.Edge.Valid():
 		p = EntryPoint(enter.Edge, enter.Frac, n.displays)
+	case home && n.homePoint != nil:
+		p, wentHome = SnapToDisplays(*n.homePoint, n.displays), true
 	default:
 		p = Centre(n.displays)
 	}
+	n.homePoint = nil
 	n.lastCursor = p
 	n.cursorParked = false
 	n.entryEdge, n.entryPoint = "", p
-	if enter != nil && enter.Edge.Valid() {
+	switch {
+	case enter != nil && enter.Edge.Valid():
 		n.entryEdge = enter.Edge
+	case wentHome:
+		n.armReentryGuard(p)
 	}
 	cap, inj := n.cfg.Capturer, n.cfg.Injector
 	n.after(func() {
@@ -1135,6 +1249,12 @@ func (n *Node) localInput(ev input.Event) bool {
 			n.buttons |= buttonBit(ev.Button)
 		} else {
 			n.buttons &^= buttonBit(ev.Button)
+			if n.swallowedButtons&buttonBit(ev.Button) != 0 {
+				// The down was swallowed by touch-to-reclaim (§6.3): the up
+				// goes with it, so no machine sees an unmatched release.
+				n.swallowedButtons &^= buttonBit(ev.Button)
+				return true
+			}
 		}
 	case input.Key:
 		if bit, ok := keymap.ModifierBit(ev.Wire); ok {
@@ -1158,6 +1278,15 @@ func (n *Node) localInput(ev input.Event) bool {
 			n.checkEdge(Point{ev.X, ev.Y})
 		}
 		return false
+	}
+	if ev.Kind == input.MouseMove && !n.cursorParked && n.homePoint == nil {
+		// Control left without parking the pointer (lockCursorWhileRemote
+		// off): where it is now is where it was when control left (§6.3).
+		p := Point{ev.X, ev.Y}
+		n.homePoint = &p
+	}
+	if n.touchReclaim(ev) {
+		return true
 	}
 	n.parkForForwarding(ev)
 	n.forward(ev)
@@ -1195,6 +1324,13 @@ func (n *Node) forward(ev input.Event) {
 		return
 	}
 	n.forwardedToActive = true
+	switch ev.Kind {
+	case input.MouseMove, input.MouseButton, input.Scroll:
+		// Physical pointer input going out: this machine is the one driving
+		// the active machine (§6.3).
+		n.driving = true
+		n.lastPhysForward, n.lastPhysForwardTo = n.now(), n.active
+	}
 	n.send(n.active, frame)
 }
 
@@ -1272,6 +1408,10 @@ func (n *Node) edgeTimerFired() {
 
 // handOver broadcasts `active` naming target and makes this machine inactive.
 func (n *Node) handOver(target string, enter *Enter) {
+	// Handing control away from here means this machine's own input is what
+	// drives the new active machine, so its mouse must not reclaim (§6.3).
+	// Directing control elsewhere while already driving keeps driving.
+	fromSelf := n.isSelf(n.active)
 	n.seq++
 	msg := ActiveMsg{T: TActive, ID: target, From: n.active, Enter: enter, Buttons: n.buttons, Modifiers: n.mods, Seq: n.seq}
 	n.broadcast(MustControl(msg))
@@ -1290,6 +1430,9 @@ func (n *Node) handOver(target string, enter *Enter) {
 	}
 	n.logf("info", "control → %s (%s)", n.peerName(target), where)
 	n.setRemoteActive(target)
+	if fromSelf {
+		n.driving = true
+	}
 	n.emitState()
 }
 
@@ -1299,7 +1442,7 @@ func (n *Node) claimSelf() {
 	n.broadcast(MustControl(ClaimMsg{T: TClaim, ID: n.cfg.ID, Seq: n.seq}))
 	n.lastHandoverFrom = n.cfg.ID
 	n.active = n.cfg.ID
-	n.becomeActiveLocal(nil, 0, 0)
+	n.becomeActiveLocal(nil, 0, 0, true)
 	n.logf("info", "control → %s (claimed)", n.self.Name)
 	n.emitState()
 }

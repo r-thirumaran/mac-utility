@@ -40,7 +40,10 @@ type Settings struct {
 	HotkeySwitch          string `json:"hotkeySwitch"`
 	LockCursorWhileRemote bool   `json:"lockCursorWhileRemote"`
 	ShakeToLocate         bool   `json:"shakeToLocate"`
-	Port                  int    `json:"port"`
+	// TouchToReclaim: using this machine's OWN mouse brings the pointer back
+	// here, unless this machine is the one driving the active machine (§6.3).
+	TouchToReclaim bool `json:"touchToReclaim"`
+	Port           int  `json:"port"`
 }
 
 // DefaultSettings returns the defaults.
@@ -53,6 +56,7 @@ func DefaultSettings() Settings {
 		HotkeySwitch:          "ctrl+alt",
 		LockCursorWhileRemote: true,
 		ShakeToLocate:         true,
+		TouchToReclaim:        true,
 		Port:                  24800,
 	}
 }
@@ -84,7 +88,8 @@ func (s Settings) Normalize() Settings {
 
 // configVersion is the current config.json layout. Version 2 added
 // settings.shakeToLocate (default on), peers[].displays and layout.machines.
-const configVersion = 2
+// Version 3 added settings.touchToReclaim (default on).
+const configVersion = 3
 
 // configFile is the on-disk document.
 type configFile struct {
@@ -124,6 +129,10 @@ func OpenStore(dir string) (*PeerStore, error) {
 	// unmarshal as false although the feature defaults to on.
 	if s.cfg.Version < 2 && !fresh {
 		s.cfg.Settings.ShakeToLocate = true
+	}
+	// Likewise for touchToReclaim, added in version 3.
+	if s.cfg.Version < 3 && !fresh {
+		s.cfg.Settings.TouchToReclaim = true
 	}
 	migrated := s.cfg.Version != configVersion
 	s.cfg.Version = configVersion

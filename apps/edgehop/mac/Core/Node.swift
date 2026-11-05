@@ -105,6 +105,17 @@ final class Node {
     /// This Mac's own pointer is parked (detached, centred, hidden) while its mouse drives
     /// another machine.
     private var localCursorParked = false
+    /// Spec §6.3: where this Mac's pointer was when control left it, so a claim can put it
+    /// back exactly there; and whether this Mac is the one driving the active machine, in
+    /// which case its own mouse forwards instead of reclaiming.
+    private var homePoint: Geometry.Point?
+    private var driving = false
+    private var lastPhysForward: Date?
+    private var lastPhysForwardTo = ""
+    private var touchSince: Date?
+    private var touchTravel = 0
+    /// Button-downs swallowed by touch to reclaim, whose up must be swallowed too.
+    private var swallowedButtons: UInt8 = 0
     private var edgeTimer: DispatchWorkItem?
     private var lastNamedActive = Date.distantPast
     private var lastRemoteInput: Date?
@@ -416,7 +427,7 @@ final class Node {
         }
         // Nobody here forwarded to it: revert to the start state silently.
         active = id
-        becomeActiveLocal(enter: nil, buttons: 0, mods: 0)
+        becomeActiveLocal(enter: nil, buttons: 0, mods: 0, home: false)
     }
 
     /// A machine was seen (or vanished) on the network.
@@ -455,7 +466,7 @@ final class Node {
         }
         if active == peerID {
             active = id
-            becomeActiveLocal(enter: nil, buttons: 0, mods: 0)
+            becomeActiveLocal(enter: nil, buttons: 0, mods: 0, home: false)
         }
         config.sender?.disconnect(peerID)
         log("info", "unpaired \(peerName(peerID))")
@@ -531,10 +542,11 @@ final class Node {
             }
             seq = m.seq
             lastHandoverFrom = m.from
+            drivingHandedOver(m.id)
             if isSelf(m.id) {
                 log("info", "control arrived from \(peerName(m.from))")
                 active = id
-                becomeActiveLocal(enter: m.enter, buttons: m.buttons, mods: m.modifiers)
+                becomeActiveLocal(enter: m.enter, buttons: m.buttons, mods: m.modifiers, home: false)
             } else {
                 setRemoteActive(m.id)
             }
@@ -548,9 +560,10 @@ final class Node {
             seq = m.seq
             let target = m.id.isEmpty ? p.id : m.id
             lastHandoverFrom = p.id
+            drivingHandedOver(target)
             if isSelf(target) {
                 active = id
-                becomeActiveLocal(enter: nil, buttons: 0, mods: 0)
+                becomeActiveLocal(enter: nil, buttons: 0, mods: 0, home: true)
             } else {
                 log("info", "\(peerName(target)) took control")
                 setRemoteActive(target)
@@ -603,6 +616,10 @@ final class Node {
         forwardedToActive = false
         edgePending = nil
         if wasSelf {
+            // Spec §6.3: remember where the pointer sat here, so touch to reclaim or
+            // Ctrl+Alt+Home puts it back exactly there.
+            homePoint = lastLocalPoint
+            resetTouchTravel()
             releaseModifiers()
             if settings.lockCursorWhileRemote, let device = config.device {
                 let centre = Geometry.centre(displays)
@@ -628,24 +645,110 @@ final class Node {
         localCursorParked = true
     }
 
+    // MARK: - Touch to reclaim (spec §6.3)
+
+    /// The travel (|dx|+|dy|) that counts as a deliberate touch of this Mac's own mouse,
+    /// how long it may take to add up, and how long after forwarding physical pointer input
+    /// this Mac still counts as driving when the active machine changes under it.
+    static let touchReclaimPx = 24
+    static let touchReclaimWindow: TimeInterval = 0.5
+    static let drivingGrace: TimeInterval = 0.75
+
+    private func resetTouchTravel() {
+        touchTravel = 0
+        touchSince = nil
+    }
+
+    /// Whether an `active`/`claim` that moves control away from `active` was caused by this
+    /// Mac's own mouse: it forwarded physical pointer input to the machine control is
+    /// leaving, moments ago (§6.3).
+    private var stillDriving: Bool {
+        guard driving, lastPhysForwardTo == active, let last = lastPhysForward else { return false }
+        return Date().timeIntervalSince(last) <= Node.drivingGrace
+    }
+
+    /// Called before `active` changes because of an `active` or `claim` from another machine:
+    /// this Mac stops driving unless the hop is one its own mouse caused (§6.3).
+    private func drivingHandedOver(_ newActive: String) {
+        guard newActive != active, !stillDriving else { return }
+        driving = false
+    }
+
+    /// Spec §6.3 on a Mac that is not active and not driving: enough movement of its own
+    /// mouse, or a press of its own button, takes control back. The triggering events are
+    /// swallowed, so the machine that had control never sees them; the matching up of a
+    /// swallowed down is swallowed too (in `onLocalInput`). Keyboard input never reclaims —
+    /// it keeps following the pointer.
+    private func touchReclaim(_ event: InputEvent) -> Bool {
+        guard settings.touchToReclaim, !driving else { return false }
+        switch event.kind {
+        case .mouseMove:
+            let now = Date()
+            if let since = touchSince, now.timeIntervalSince(since) <= Node.touchReclaimWindow {
+                // still inside the window
+            } else {
+                touchSince = now
+                touchTravel = 0
+            }
+            touchTravel += abs(event.dx) + abs(event.dy)
+            // Not a deliberate touch yet, but not the remote machine's either.
+            guard touchTravel >= Node.touchReclaimPx else { return true }
+            log("info", "own mouse moved here: taking the pointer back")
+            claimSelf()
+            return true
+        case .mouseButton:
+            guard event.down else { return false }   // ups are handled in onLocalInput
+            swallowedButtons |= Node.buttonBit(event.button)
+            log("info", "own button pressed here: taking the pointer back")
+            claimSelf()
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Arms the re-entry guard at `point`: the pointer put back where it was when control
+    /// left usually lands on the very edge it was pushed against, which must not hand control
+    /// straight back again (§6.3). That edge is disarmed once the pointer has moved
+    /// `reentryGuard` points away from it.
+    private func armReentryGuard(_ point: Geometry.Point) {
+        if let hop = Geometry.hop(world: world(), machine: id, point: point,
+                                  deadZone: settings.edgeCornerDeadZonePx) {
+            entryEdge = hop.edge
+        }
+    }
+
     /// §6.1 rule 4 after `active` was set to self. Spec §3 rule 4: an `enter.pt` places the
     /// cursor exactly there (snapped onto a real display); without it, edge + frac as before.
-    private func becomeActiveLocal(enter: Wire.Enter?, buttons: UInt8, mods: UInt8) {
+    /// `home` says this Mac took control back itself (a claim: touch to reclaim or
+    /// Ctrl+Alt+Home), in which case the pointer goes back where it was when control left
+    /// (§6.3) instead of to the centre.
+    private func becomeActiveLocal(enter: Wire.Enter?, buttons: UInt8, mods: UInt8, home: Bool) {
         lastNamedActive = Date()
         forwardedToActive = false
+        driving = false
+        resetTouchTravel()
         edgePending = nil
         shake.reset()
         gestures.reset()
         let point: Geometry.Point
+        var wentHome = false
         if let pt = enter?.pt {
             point = Geometry.entryPoint(pt: pt.point, displays: displays)
         } else if let enter {
             point = Geometry.entryPoint(edge: enter.edge, frac: enter.frac, displays: displays)
+        } else if home, let back = homePoint {
+            point = Geometry.entryPoint(pt: back, displays: displays)
+            wentHome = true
         } else {
             point = Geometry.centre(displays)
         }
+        homePoint = nil
         entryEdge = enter?.edge
         entryPoint = point
+        if entryEdge == nil, wentHome {
+            armReentryGuard(point)
+        }
         guard let device = config.device else { return }
         device.lockCursor(false, centre: Geometry.centre(displays))
         localCursorParked = false
@@ -755,6 +858,12 @@ final class Node {
                 buttons |= Node.buttonBit(event.button)
             } else {
                 buttons &= ~Node.buttonBit(event.button)
+                if swallowedButtons & Node.buttonBit(event.button) != 0 {
+                    // The down was swallowed by touch to reclaim (§6.3): the up goes with
+                    // it, so no machine sees an unmatched release.
+                    swallowedButtons &= ~Node.buttonBit(event.button)
+                    return true
+                }
             }
         case .key:
             if let bit = KeyMap.modifierBit(event.wire) {
@@ -780,6 +889,14 @@ final class Node {
                 checkEdge(Geometry.Point(x: event.x, y: event.y))
             }
             return false
+        }
+        if event.kind == .mouseMove, !localCursorParked, homePoint == nil {
+            // Control left without parking the pointer (lockCursorWhileRemote off): where it
+            // is now is where it was when control left (§6.3).
+            homePoint = Geometry.Point(x: event.x, y: event.y)
+        }
+        if touchReclaim(event) {
+            return true
         }
         parkForForwarding(event)
         if localCursorParked, event.kind == .mouseMove, let device = config.device,
@@ -844,6 +961,10 @@ final class Node {
             send(Wire.key(usage: onTheWire(usage), state: Wire.keyUp, mods: 0), to: active)
         }
         forwardedToActive = true
+        // A trackpad gesture is physical pointer input: this Mac is driving (§6.3).
+        driving = true
+        lastPhysForward = Date()
+        lastPhysForwardTo = active
     }
 
     /// Spec §6: this machine's pointer was shaken. When it drives a remote machine the ring
@@ -902,6 +1023,15 @@ final class Node {
             return
         }
         forwardedToActive = true
+        switch event.kind {
+        case .mouseMove, .mouseButton, .scroll:
+            // Physical pointer input going out: this Mac is the one driving (§6.3).
+            driving = true
+            lastPhysForward = Date()
+            lastPhysForwardTo = active
+        default:
+            break
+        }
         send(frame, to: active)
     }
 
@@ -966,6 +1096,10 @@ final class Node {
 
     /// Broadcasts `active` naming `target` and makes this machine inactive.
     private func handOver(to target: String, enter: Wire.Enter?) {
+        // Handing control away from here means this Mac's own input is what drives the new
+        // active machine, so its mouse must not reclaim (§6.3). Directing control elsewhere
+        // while already driving keeps driving.
+        let fromSelf = isSelf(active)
         seq += 1
         broadcast(Wire.Active(id: target, from: active, enter: enter, buttons: buttons, modifiers: mods, seq: seq))
         lastHandoverFrom = active
@@ -981,6 +1115,9 @@ final class Node {
         }
         log("info", "control → \(peerName(target)) (\(whereTo))")
         setRemoteActive(target)
+        if fromSelf {
+            driving = true
+        }
         emitState()
     }
 
@@ -990,7 +1127,7 @@ final class Node {
         broadcast(Wire.Claim(id: id, seq: seq))
         lastHandoverFrom = id
         active = id
-        becomeActiveLocal(enter: nil, buttons: 0, mods: 0)
+        becomeActiveLocal(enter: nil, buttons: 0, mods: 0, home: true)
         log("info", "control → \(name) (claimed)")
         emitState()
     }
