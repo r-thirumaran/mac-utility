@@ -4,7 +4,7 @@ Living checklist for the multi-app build. Any resumed session (including the
 automatic 2-hourly orchestrator check-in) starts here. Keep it honest: a box is
 ticked only when the thing exists on this branch and, where it has CI, CI is green.
 
-Branch: `claude/busy-meitner-hqorah` · CI: `.github/workflows/build.yml`
+Branch: `main` · CI: `.github/workflows/build.yml`
 
 ## Apps
 
