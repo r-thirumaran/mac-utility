@@ -18,13 +18,16 @@ import (
 // and the machine name.
 const ConfigFile = "config.json"
 
-// Peer is a paired machine as remembered in the config file.
+// Peer is a paired machine as remembered in the config file. Displays is
+// the peer's last known monitor arrangement, kept so an offline machine
+// still draws on the canvas and its boundaries still exist (§6 `layout`).
 type Peer struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Plat      string `json:"plat"`
-	StaticPub string `json:"staticPub"` // base64
-	LastAddr  string `json:"lastAddr,omitempty"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Plat      string    `json:"plat"`
+	StaticPub string    `json:"staticPub"` // base64
+	LastAddr  string    `json:"lastAddr,omitempty"`
+	Displays  []Display `json:"displays,omitempty"`
 }
 
 // Settings are the user preferences (docs/ARCHITECTURE.md §5
@@ -36,6 +39,7 @@ type Settings struct {
 	ClipboardSync         bool   `json:"clipboardSync"`
 	HotkeySwitch          string `json:"hotkeySwitch"`
 	LockCursorWhileRemote bool   `json:"lockCursorWhileRemote"`
+	ShakeToLocate         bool   `json:"shakeToLocate"`
 	Port                  int    `json:"port"`
 }
 
@@ -48,6 +52,7 @@ func DefaultSettings() Settings {
 		ClipboardSync:         true,
 		HotkeySwitch:          "ctrl+alt",
 		LockCursorWhileRemote: true,
+		ShakeToLocate:         true,
 		Port:                  24800,
 	}
 }
@@ -77,6 +82,10 @@ func (s Settings) Normalize() Settings {
 	return s
 }
 
+// configVersion is the current config.json layout. Version 2 added
+// settings.shakeToLocate (default on), peers[].displays and layout.machines.
+const configVersion = 2
+
 // configFile is the on-disk document.
 type configFile struct {
 	Version  int      `json:"version"`
@@ -97,7 +106,7 @@ type PeerStore struct {
 
 // NewMemoryStore returns a store that is never written to disk (tests).
 func NewMemoryStore() *PeerStore {
-	return &PeerStore{cfg: configFile{Version: 1, Settings: DefaultSettings()}}
+	return &PeerStore{cfg: configFile{Version: configVersion, Settings: DefaultSettings()}}
 }
 
 // OpenStore loads <dir>/config.json, creating defaults when it is missing.
@@ -107,14 +116,19 @@ func OpenStore(dir string) (*PeerStore, error) {
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
-	if s.cfg.Version == 0 {
-		s.cfg.Version = 1
-	}
+	fresh := s.cfg.Version == 0 && len(s.cfg.Peers) == 0
 	if s.cfg.Settings == (Settings{}) {
 		s.cfg.Settings = DefaultSettings()
 	}
+	// A config written before version 2 has no shakeToLocate key, which would
+	// unmarshal as false although the feature defaults to on.
+	if s.cfg.Version < 2 && !fresh {
+		s.cfg.Settings.ShakeToLocate = true
+	}
+	migrated := s.cfg.Version != configVersion
+	s.cfg.Version = configVersion
 	s.cfg.Settings = s.cfg.Settings.Normalize()
-	if err != nil {
+	if err != nil || migrated {
 		if sErr := s.saveLocked(); sErr != nil {
 			return nil, sErr
 		}
@@ -245,6 +259,35 @@ func (s *PeerStore) SetLastAddr(id, addr string) error {
 	return nil
 }
 
+// SetPeerDisplays remembers a peer's monitor arrangement.
+func (s *PeerStore) SetPeerDisplays(id string, displays []Display) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, p := range s.cfg.Peers {
+		if p.ID != id {
+			continue
+		}
+		if sameDisplays(p.Displays, displays) {
+			return nil
+		}
+		s.cfg.Peers[i].Displays = append([]Display(nil), displays...)
+		return s.saveLocked()
+	}
+	return nil
+}
+
+func sameDisplays(a, b []Display) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // UpdatePeerInfo refreshes the name and platform of a paired peer.
 func (s *PeerStore) UpdatePeerInfo(id, name, plat string) error {
 	s.mu.Lock()
@@ -269,6 +312,7 @@ func (s *PeerStore) Layout() Layout {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	l := s.cfg.Layout
+	l.Machines = append([]Placement(nil), l.Machines...)
 	l.Tiles = append([]Tile(nil), l.Tiles...)
 	return l
 }

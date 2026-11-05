@@ -77,6 +77,9 @@ final class EdgehopBridge {
             return try self.state()
         }
 
+        // Spec §5: `{layout: {updatedAt?, machines:[{id,x,y}]}}`. A legacy `{tiles}` layout is
+        // still accepted (converted per §4). Returns the new state; an invalid canvas comes
+        // back as `invalid_layout` naming the machines that overlap.
         bridge.register("edgehop.layout.set") { [weak self] params in
             guard let self else { throw BridgeError.internalError("bridge is gone") }
             guard let raw = params["layout"] else { throw BridgeError.invalidParams("layout required") }
@@ -90,11 +93,13 @@ final class EdgehopBridge {
                 try self.node.setLayout(layout)
             } catch let error as BridgeError {
                 throw error
+            } catch let error as Layout.ValidationError {
+                throw BridgeError(code: "invalid_layout", message: error.description)
             } catch {
-                throw BridgeError.invalidParams(String(describing: error))
+                // `win/bridge.go` answers every `SetLayout` failure with this code.
+                throw BridgeError(code: "invalid_layout", message: String(describing: error))
             }
-            let result: [String: Any] = ["layout": try jsonObject(self.node.layout)]
-            return result
+            return try self.state()
         }
 
         bridge.register("edgehop.switchTo") { [weak self] params in

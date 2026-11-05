@@ -50,9 +50,10 @@ func Opposite(e Edge) Edge {
 	return e
 }
 
-// Point is a pixel position.
+// Point is a pixel position. It goes on the wire as `enter.pt` (§6 `active`).
 type Point struct {
-	X, Y int
+	X int `json:"x"`
+	Y int `json:"y"`
 }
 
 // Rect is an axis-aligned pixel rectangle; X+W and Y+H are exclusive.

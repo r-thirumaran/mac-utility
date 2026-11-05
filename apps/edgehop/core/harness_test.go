@@ -95,6 +95,7 @@ type machine struct {
 	node  *Node
 	tr    *Transport
 	log   *eventLog
+	loc   *locateSpy
 	stop  func()
 
 	linesMu sync.Mutex
@@ -127,7 +128,7 @@ func newMachine(t *testing.T, name string, displays ...Display) *machine {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := &machine{t: t, name: name, id: id, store: NewMemoryStore(), clock: newFakeClock(), log: &eventLog{}}
+	m := &machine{t: t, name: name, id: id, store: NewMemoryStore(), clock: newFakeClock(), log: &eventLog{}, loc: &locateSpy{}}
 	m.dev = input.NewFake(displays...)
 	m.clip = &MemClipboard{}
 	return m
@@ -137,7 +138,7 @@ func (m *machine) buildNode(sender Sender, plat string) {
 	m.node = New(Config{
 		ID: m.id.ID(), Name: m.name, Plat: plat, Version: "test",
 		Store: m.store, Capturer: m.dev, Injector: m.dev, Transport: sender, Clipboard: m.clip,
-		Now: m.clock.Now,
+		Now: m.clock.Now, Locator: m.loc,
 	})
 	go func() {
 		for e := range m.node.Events() {
@@ -223,20 +224,78 @@ func pair(t *testing.T, a, b *machine) {
 	waitFor(t, fmt.Sprintf("%s and %s online", a.name, b.name), func() bool { return a.online(b) && b.online(a) })
 }
 
-// setLayout publishes a row layout from the first machine and waits until
+// canvasRow lays the machines out left to right on the world canvas, each
+// one's desktop union touching the previous one's right edge (layout v2).
+func canvasRow(ms ...*machine) Layout {
+	l := Layout{}
+	x := 0
+	for _, m := range ms {
+		u := Union(m.dev.Displays())
+		l.Machines = append(l.Machines, Placement{ID: m.ID(), X: x - u.X, Y: -u.Y})
+		x += u.W
+	}
+	return l
+}
+
+// waitDisplays waits until every machine knows every other's monitors: the
+// canvas and its boundary segments are derived from them (§6 `layout`).
+func waitDisplays(t *testing.T, ms ...*machine) {
+	t.Helper()
+	for _, m := range ms {
+		for _, o := range ms {
+			if o == m {
+				continue
+			}
+			m, o := m, o
+			waitFor(t, m.name+" knows "+o.name+"'s displays", func() bool {
+				for _, p := range m.node.State().Peers {
+					if p.ID == o.ID() && len(p.Displays) > 0 {
+						return true
+					}
+				}
+				return false
+			})
+		}
+	}
+}
+
+// setRowLayout publishes a canvas row from the first machine and waits until
 // every machine has it.
 func setRowLayout(t *testing.T, ms ...*machine) {
 	t.Helper()
-	l := Layout{}
-	for i, m := range ms {
-		l.Tiles = append(l.Tiles, Tile{ID: m.ID(), Col: i, Row: 2})
-	}
-	if err := ms[0].node.SetLayout(l); err != nil {
+	waitDisplays(t, ms...)
+	if err := ms[0].node.SetLayout(canvasRow(ms...)); err != nil {
 		t.Fatal(err)
 	}
 	for _, m := range ms {
 		m := m
-		waitFor(t, "layout on "+m.name, func() bool { return len(m.node.Layout().Tiles) == len(ms) })
+		waitFor(t, "layout on "+m.name, func() bool { return len(m.node.Layout().Machines) == len(ms) })
+	}
+}
+
+// locateSpy counts the shake-to-locate overlays a machine was asked to show.
+type locateSpy struct {
+	mu sync.Mutex
+	n  int
+}
+
+func (l *locateSpy) ShowLocate() {
+	l.mu.Lock()
+	l.n++
+	l.mu.Unlock()
+}
+
+func (l *locateSpy) count() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.n
+}
+
+// shake feeds the horizontal reversals of §6.3 as physical mouse moves: five
+// 60-unit strokes alternating direction, i.e. four counting reversals.
+func (m *machine) shake() {
+	for _, dx := range []int{60, -60, 60, -60, 60} {
+		m.move(dx, 0)
 	}
 }
 

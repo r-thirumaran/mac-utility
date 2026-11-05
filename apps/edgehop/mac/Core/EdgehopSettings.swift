@@ -11,6 +11,8 @@ struct EdgehopSettings: Codable, Equatable {
     var clipboardSync: Bool
     var hotkeySwitch: String
     var lockCursorWhileRemote: Bool
+    /// Spec §6: shaking the pointer flashes a ring where it actually is.
+    var shakeToLocate: Bool
     var port: Int
 
     static let defaults = EdgehopSettings(switchDelayMs: 0,
@@ -19,6 +21,7 @@ struct EdgehopSettings: Codable, Equatable {
                                           clipboardSync: true,
                                           hotkeySwitch: "ctrl+alt",
                                           lockCursorWhileRemote: true,
+                                          shakeToLocate: true,
                                           port: 24800)
 
     init(switchDelayMs: Int,
@@ -27,6 +30,7 @@ struct EdgehopSettings: Codable, Equatable {
          clipboardSync: Bool,
          hotkeySwitch: String,
          lockCursorWhileRemote: Bool,
+         shakeToLocate: Bool = true,
          port: Int) {
         self.switchDelayMs = switchDelayMs
         self.edgeCornerDeadZonePx = edgeCornerDeadZonePx
@@ -34,13 +38,15 @@ struct EdgehopSettings: Codable, Equatable {
         self.clipboardSync = clipboardSync
         self.hotkeySwitch = hotkeySwitch
         self.lockCursorWhileRemote = lockCursorWhileRemote
+        self.shakeToLocate = shakeToLocate
         self.port = port
     }
 
     // MARK: - Codable
 
     private enum CodingKeys: String, CodingKey {
-        case switchDelayMs, edgeCornerDeadZonePx, swapCmdCtrl, clipboardSync, hotkeySwitch, lockCursorWhileRemote, port
+        case switchDelayMs, edgeCornerDeadZonePx, swapCmdCtrl, clipboardSync, hotkeySwitch, lockCursorWhileRemote
+        case shakeToLocate, port
     }
 
     /// Missing keys take the defaults (a partial object from `edgehop.settings.set` or an
@@ -54,6 +60,7 @@ struct EdgehopSettings: Codable, Equatable {
         clipboardSync = try container.decodeIfPresent(Bool.self, forKey: .clipboardSync) ?? d.clipboardSync
         hotkeySwitch = try container.decodeIfPresent(String.self, forKey: .hotkeySwitch) ?? d.hotkeySwitch
         lockCursorWhileRemote = try container.decodeIfPresent(Bool.self, forKey: .lockCursorWhileRemote) ?? d.lockCursorWhileRemote
+        shakeToLocate = try container.decodeIfPresent(Bool.self, forKey: .shakeToLocate) ?? d.shakeToLocate
         port = try container.decodeIfPresent(Int.self, forKey: .port) ?? d.port
     }
 
@@ -65,6 +72,7 @@ struct EdgehopSettings: Codable, Equatable {
         try container.encode(clipboardSync, forKey: .clipboardSync)
         try container.encode(hotkeySwitch, forKey: .hotkeySwitch)
         try container.encode(lockCursorWhileRemote, forKey: .lockCursorWhileRemote)
+        try container.encode(shakeToLocate, forKey: .shakeToLocate)
         try container.encode(port, forKey: .port)
     }
 

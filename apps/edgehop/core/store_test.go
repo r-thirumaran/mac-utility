@@ -114,3 +114,78 @@ func TestIdentityAndStoreOnDisk(t *testing.T) {
 		t.Fatal("platform/name")
 	}
 }
+
+func TestStoreCanvasPeerDisplaysAndV1Migration(t *testing.T) {
+	dir := t.TempDir()
+	// A version-1 config file: tiles only, no shakeToLocate key, no peer
+	// displays. Opening it must keep the feature on (it defaults to true) and
+	// leave the tiles for the node to arrange on the canvas.
+	legacy := `{"version":1,"name":"Old","peers":[{"id":"peer-1","name":"P","plat":"macos","staticPub":"AAA"}],` +
+		`"layout":{"updatedAt":11,"tiles":[{"id":"self-1","col":0,"row":0},{"id":"peer-1","col":1,"row":0}]},` +
+		`"settings":{"switchDelayMs":10,"edgeCornerDeadZonePx":32,"swapCmdCtrl":true,"clipboardSync":true,` +
+		`"hotkeySwitch":"ctrl+alt","lockCursorWhileRemote":true,"port":24800}}`
+	if err := os.WriteFile(filepath.Join(dir, ConfigFile), []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.Settings().ShakeToLocate {
+		t.Fatal("shakeToLocate lost when upgrading a v1 config")
+	}
+	l := s.Layout()
+	if len(l.Tiles) != 2 || l.UpdatedAt != 11 || len(l.Machines) != 0 {
+		t.Fatalf("legacy layout = %+v", l)
+	}
+	// The node converts the tiles to a canvas on load and writes it back.
+	displays := map[string][]Display{"self-1": fhd, "peer-1": qhd}
+	up, changed := l.Upgraded(displays)
+	if !changed {
+		t.Fatal("legacy layout was not upgraded")
+	}
+	if err := s.SetLayout(up); err != nil {
+		t.Fatal(err)
+	}
+	// Peers' last known displays persist so an offline machine still draws.
+	if err := s.SetPeerDisplays("peer-1", qhd); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetPeerDisplays("peer-1", qhd); err != nil { // no-op rewrite
+		t.Fatal(err)
+	}
+	if err := s.SetPeerDisplays("missing", qhd); err != nil {
+		t.Fatal(err)
+	}
+
+	s2, err := OpenStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok := s2.Peer("peer-1")
+	if !ok || len(p.Displays) != 1 || p.Displays[0].W != 2560 {
+		t.Fatalf("peer displays = %+v", p)
+	}
+	got := s2.Layout()
+	if len(got.Machines) != 2 || len(got.Tiles) != 2 {
+		t.Fatalf("stored canvas = %+v", got)
+	}
+	if pl, _ := got.Placement("peer-1"); pl.X != 1920 {
+		t.Fatalf("placement = %+v", got.Machines)
+	}
+	if !s2.Settings().ShakeToLocate {
+		t.Fatal("shakeToLocate not persisted")
+	}
+	// A canvas on which two machines overlap is refused.
+	if err := s2.SetLayout(Layout{Machines: []Placement{{ID: "a", X: LayoutMaxOffset * 2}}}); err == nil {
+		t.Fatal("off-canvas placement stored")
+	}
+	// A brand new config gets the defaults, shakeToLocate included.
+	s3, err := OpenStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s3.Settings() != DefaultSettings() {
+		t.Fatalf("fresh settings = %+v", s3.Settings())
+	}
+}

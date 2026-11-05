@@ -10,19 +10,24 @@ struct StoredPeer: Codable, Equatable {
     /// Base64 of the raw 32-byte X25519 public key.
     var staticPub: String
     var lastAddr: String
+    /// Spec §4: the displays it last reported, so an offline machine still draws on the
+    /// canvas and its boundaries still exist.
+    var displays: [Display]
 
-    init(id: String, name: String, plat: String, staticPub: String, lastAddr: String = "") {
+    init(id: String, name: String, plat: String, staticPub: String, lastAddr: String = "",
+         displays: [Display] = []) {
         self.id = id
         self.name = name
         self.plat = plat
         self.staticPub = staticPub
         self.lastAddr = lastAddr
+        self.displays = displays
     }
 
     // MARK: - Codable
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, plat, staticPub, lastAddr
+        case id, name, plat, staticPub, lastAddr, displays
     }
 
     init(from decoder: Decoder) throws {
@@ -32,6 +37,7 @@ struct StoredPeer: Codable, Equatable {
         plat = try container.decodeIfPresent(String.self, forKey: .plat) ?? ""
         staticPub = try container.decodeIfPresent(String.self, forKey: .staticPub) ?? ""
         lastAddr = try container.decodeIfPresent(String.self, forKey: .lastAddr) ?? ""
+        displays = try container.decodeIfPresent([Display].self, forKey: .displays) ?? []
     }
 
     /// `lastAddr` is `omitempty` on the Go side.
@@ -43,6 +49,9 @@ struct StoredPeer: Codable, Equatable {
         try container.encode(staticPub, forKey: .staticPub)
         if !lastAddr.isEmpty {
             try container.encode(lastAddr, forKey: .lastAddr)
+        }
+        if !displays.isEmpty {
+            try container.encode(displays, forKey: .displays)
         }
     }
 }

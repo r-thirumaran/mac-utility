@@ -18,12 +18,16 @@ directly.
   network (Bonjour, `_edgehop._tcp`). The Machines page lists what it sees;
   machines you have paired show as online/offline, the one that currently has
   the pointer as *Active*.
-* **Layout.** The Layout page is a 5 × 5 grid. Drag each machine's tile next to
-  the machine it physically sits beside (the tiles are drawn with the real
-  shape of each machine's displays). The pointer crosses an edge only where two
-  tiles touch, so a machine with nothing to its left simply stops at its left
-  edge as before. The layout is shared: edit it on any machine and every other
-  one gets it.
+* **Layout.** The Layout page is a to-scale canvas of every screen of every
+  machine: built-in displays and external monitors, Macs and PCs alike. Each
+  machine's monitors move together and keep the arrangement from that
+  machine's own Display settings. Drag the machines so their screens touch
+  where they sit on your desk; edges snap together. The touching stretches
+  are highlighted: those are the boundaries. The pointer crosses to another
+  machine only there, and arrives at the same height on the other screen.
+  Anywhere else, the edge stops the pointer as before. Add a third machine
+  later and it appears on the canvas, ready to place. The layout is shared:
+  edit it on any machine and every other one gets it.
 * **Hopping.** The active machine watches its own pointer. When it is pushed
   against an outer edge of the desktop that has a neighbour in the layout
   (and no button is held), control moves there: the pointer appears on the
@@ -40,6 +44,9 @@ directly.
   bar menu has *Switch to …* entries too.
 * **Clipboard.** When control moves, the text clipboard goes with it (switch
   this off in Settings if you prefer).
+* **Lost the pointer?** Shake the mouse left and right quickly: a ring
+  appears around the pointer on whichever machine it is on (Settings ▸
+  *Shake the mouse to find the pointer*).
 * **If a machine disappears** (sleep, cable out, crash) while it has the
   pointer, the machine that was sending to it takes control back after a few
   seconds, so you are never stuck looking at a dead screen.

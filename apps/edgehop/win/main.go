@@ -153,6 +153,7 @@ func run(o options) error {
 		ID: self.ID(), Name: machineName, Plat: core.Platform(), Version: version,
 		Store: store, Capturer: dev, Injector: dev, Transport: a.tr, Clipboard: newClipboard(),
 		TickInterval: time.Second, Logf: a.nodeLogf,
+		Locator: core.LocatorFunc(input.Locate),
 	})
 	a.tr.Bind(a.node)
 	a.register()

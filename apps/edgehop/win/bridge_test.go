@@ -110,11 +110,36 @@ func TestBridgeMethods(t *testing.T) {
 	if e := call(t, a, "edgehop.layout.set", map[string]any{"layout": map[string]any{"tiles": []map[string]any{{"id": a.node.ID(), "col": 2, "row": 2}}}}, &lr); e != nil {
 		t.Fatal(e)
 	}
-	if len(lr.Layout.Tiles) != 1 || lr.Layout.UpdatedAt == 0 {
+	// A legacy tile grid is accepted for one release and arranged on the
+	// canvas, so the answer carries machines as well as tiles.
+	if len(lr.Layout.Tiles) != 1 || len(lr.Layout.Machines) != 1 || lr.Layout.UpdatedAt == 0 {
 		t.Fatalf("layout = %+v", lr.Layout)
 	}
-	if e := call(t, a, "edgehop.layout.set", map[string]any{"layout": map[string]any{"tiles": []map[string]any{{"id": "x", "col": 1, "row": 1}, {"id": "y", "col": 1, "row": 1}}}}, nil); e == nil || e.Code != bridge.CodeInvalidParams {
+	if e := call(t, a, "edgehop.layout.set", map[string]any{"layout": map[string]any{"tiles": []map[string]any{{"id": "x", "col": 1, "row": 1}, {"id": "y", "col": 1, "row": 1}}}}, nil); e == nil || e.Code != codeInvalidLayout {
 		t.Fatalf("overlapping tiles accepted: %v", e)
+	}
+	// The canvas model round trips and overlapping machines are refused by
+	// name.
+	self := a.node.ID()
+	if e := call(t, a, "edgehop.layout.set", map[string]any{"layout": map[string]any{"machines": []map[string]any{{"id": self, "x": 0, "y": 0}}}}, &lr); e != nil {
+		t.Fatal(e)
+	}
+	if len(lr.Layout.Machines) != 1 || lr.Layout.Machines[0].ID != self {
+		t.Fatalf("canvas layout = %+v", lr.Layout)
+	}
+	var st2 uiState
+	if e := call(t, a, "edgehop.state", nil, &st2); e != nil || st2.Layout.Machines == nil {
+		t.Fatalf("state layout = %+v %v", st2.Layout, e)
+	}
+	// shakeToLocate is a setting and defaults to on.
+	if !a.node.Settings().ShakeToLocate {
+		t.Fatal("shakeToLocate should default to true")
+	}
+	if e := call(t, a, "edgehop.settings.set", map[string]any{"shakeToLocate": false}, &s); e != nil || s.ShakeToLocate {
+		t.Fatalf("shakeToLocate = %+v %v", s, e)
+	}
+	if e := call(t, a, "edgehop.settings.set", map[string]any{"shakeToLocate": true}, &s); e != nil || !s.ShakeToLocate {
+		t.Fatalf("shakeToLocate = %+v %v", s, e)
 	}
 	// pairing parameter validation
 	if e := call(t, a, "edgehop.pair.start", map[string]any{}, nil); e == nil || e.Code != bridge.CodeInvalidParams {

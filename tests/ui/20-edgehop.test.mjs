@@ -27,20 +27,6 @@ const waitState = (page, pred, msg, timeout = 20000) =>
 /** Remove transient toasts so screenshots show the page itself. */
 const clearToasts = (page) => page.evaluate(() => document.querySelectorAll('.toast-region .toast').forEach((el) => el.remove()));
 
-/** Drag a layout tile onto a grid cell with real pointer events. */
-async function dragTile(page, id, col, row) {
-  const tile = page.locator(`.eh-tile[data-id="${id}"]`).first();
-  const cell = page.locator(`.eh-cell[data-col="${col}"][data-row="${row}"]`);
-  await tile.scrollIntoViewIfNeeded();
-  const tb = await tile.boundingBox();
-  const cb = await cell.boundingBox();
-  await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(tb.x + tb.width / 2 + 12, tb.y + tb.height / 2 + 8, { steps: 3 });
-  await page.mouse.move(cb.x + cb.width / 2, cb.y + cb.height / 2, { steps: 10 });
-  await page.mouse.up();
-}
-
 export default async function (t) {
   mkdirSync(resolve(here, '..', '..', 'test-results'), { recursive: true });
   const errors = [];
@@ -125,22 +111,23 @@ export default async function (t) {
 
   // ---------------------------------------------------------------- layout
   await L.click('#nav .tab[data-tab="layout"]');
-  await t.expect(await L.$$eval('#layout-unplaced .eh-tile', (els) => els.length), 2, 'both machines start unplaced');
-  await dragTile(L, leftId, 1, 2);
-  await dragTile(L, rightId, 2, 2);
-  await t.expect(await L.$eval('.eh-cell[data-col="1"][data-row="2"] .eh-tile', (e) => e.dataset.id), leftId, 'Left tile dropped at (1,2)');
-  await t.expect(await L.$eval('.eh-cell[data-col="2"][data-row="2"] .eh-tile', (e) => e.dataset.id), rightId, 'Right tile dropped at (2,2)');
+  await t.expect(await L.$$eval('#layout-unplaced [data-action="place"]', (els) => els.length), 2, 'both machines start unplaced');
+  await L.click(`#layout-unplaced [data-action="place"][data-id="${leftId}"]`);
+  await L.click(`#layout-unplaced [data-action="place"][data-id="${rightId}"]`);
+  await t.expect(await L.$$eval('.eh-node', (els) => els.length), 2, 'both machines drawn on the canvas');
+  await t.expect(await L.$$eval('.eh-boundary', (els) => els.length), 1, 'Place puts Right touching Left: one boundary');
   await t.expect(await L.$eval('#layout-save', (b) => b.disabled), false, 'save enabled after edits');
   await L.click('#layout-save');
-  await waitState(L, () => window.__edgehop.state.layout.tiles.length === 2, 'layout saved on Left');
-  await waitState(R, () => window.__edgehop.state.layout.tiles.length === 2, 'layout shared with Right');
-  const rl = (await state(R)).layout.tiles.find((x) => x.id === rightId);
-  await t.expect(`${rl.col},${rl.row}`, '2,2', 'Right received the tiles');
+  await waitState(L, () => window.__edgehop.state.layout.machines.length === 2, 'layout saved on Left');
+  await waitState(R, () => window.__edgehop.state.layout.machines.length === 2, 'layout shared with Right');
+  const leftW = sL.self.displays.reduce((m, d) => Math.max(m, d.x + d.w), 0);
+  const rl = (await state(R)).layout.machines.find((x) => x.id === rightId);
+  await t.expect(rl.x, leftW, 'Right sits touching the right edge of Left');
   await t.expect(await L.$eval('#layout-save', (b) => b.disabled), true, 'save disabled once clean');
-  // keyboard editing works too: nudge Right one cell right and back
-  await L.focus(`.eh-tile[data-id="${rightId}"]`);
+  // keyboard editing works too: nudge Right 10 units away and back
+  await L.focus(`.eh-node[data-id="${rightId}"]`);
   await L.keyboard.press('ArrowRight');
-  await t.expect(await L.$eval('.eh-cell[data-col="3"][data-row="2"] .eh-tile', (e) => e.dataset.id), rightId, 'arrow key moved the tile');
+  await t.expect(await L.$$eval('.eh-boundary', (els) => els.length), 0, 'a 10 unit gap removes the boundary');
   await L.keyboard.press('ArrowLeft');
   await t.expect(await L.$eval('#layout-save', (b) => b.disabled), true, 'back to the saved layout');
   await clearToasts(L);
@@ -154,7 +141,7 @@ export default async function (t) {
   await waitState(L, () => !window.__edgehop.state.self.active && window.__edgehop.state.role === 'sending', 'Left is sending');
   await t.expect(await L.textContent('#status-active'), /Controlling Right/);
   await t.expect(await R.textContent('#status-active'), /Pointer is here/);
-  await t.expect(await L.$eval(`.eh-tile[data-id="${rightId}"]`, (e) => e.classList.contains('is-active')), true, 'active tile highlighted live on the layout page');
+  await t.expect(await L.$eval(`.eh-node[data-id="${rightId}"]`, (e) => e.classList.contains('is-active')), true, 'active machine highlighted live on the layout page');
   for (const [dx, dy] of [[10, 5], [7, -3], [1, 1]]) await emit(L, { kind: 'mouse_move', dx, dy });
   await emit(L, { kind: 'key', wire: 0x04, down: true });
   await emit(L, { kind: 'key', wire: 0x04, down: false });
@@ -203,6 +190,10 @@ export default async function (t) {
   await waitState(L, () => window.__edgehop.state.settings.clipboardSync === false, 'clipboard toggle saved');
   await L.click('#set-clipboard + .toggle-track');
   await waitState(L, () => window.__edgehop.state.settings.clipboardSync === true, 'clipboard toggle restored');
+  await L.click('#set-shake + .toggle-track');
+  await waitState(L, () => window.__edgehop.state.settings.shakeToLocate === false, 'shake toggle saved');
+  await L.click('#set-shake + .toggle-track');
+  await waitState(L, () => window.__edgehop.state.settings.shakeToLocate === true, 'shake toggle restored');
   await L.selectOption('#set-hotkey', 'ctrl+shift');
   await waitState(L, () => window.__edgehop.state.settings.hotkeySwitch === 'ctrl+shift', 'hotkey saved');
   await L.fill('#set-name', 'Left desk');
@@ -225,7 +216,7 @@ export default async function (t) {
   await L.click('dialog.dialog[open] .btn-danger');
   await waitState(L, () => window.__edgehop.state.peers.length === 0, 'Left forgot Right');
   await waitState(R, () => window.__edgehop.state.peers.some((p) => p.name === 'Left' && p.status === 'offline'), 'Right shows Left offline');
-  await t.expect((await state(L)).layout.tiles.length, 1, 'unpair drops the tile');
+  await t.expect((await state(L)).layout.machines.length, 1, 'unpair drops the machine');
 
   // ---------------------------------------------------------------- phone width
   const phone = await t.browser.newContext({ viewport: { width: 360, height: 740 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });

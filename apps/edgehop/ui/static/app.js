@@ -182,6 +182,7 @@ function buildSettings() {
   const swap = toggle('set-swap', (v) => setSetting({ swapCmdCtrl: v }, () => { swap.input.checked = !v; }));
   const clip = toggle('set-clipboard', (v) => setSetting({ clipboardSync: v }, () => { clip.input.checked = !v; }));
   const lock = toggle('set-lock', (v) => setSetting({ lockCursorWhileRemote: v }, () => { lock.input.checked = !v; }));
+  const shake = toggle('set-shake', (v) => setSetting({ shakeToLocate: v }, () => { shake.input.checked = !v; }));
   const login = toggle('set-login', (v) => setSetting({ launchAtLogin: v }, () => { login.input.checked = !v; }));
 
   const hotkey = h('select', { id: 'set-hotkey', 'aria-label': 'Hotkey modifiers' }, ...HOTKEYS.map(([v, l]) => h('option', { value: v }, l)));
@@ -190,7 +191,7 @@ function buildSettings() {
   const port = h('input.input', { type: 'number', id: 'set-port', min: 0, max: 65535, inputmode: 'numeric', 'aria-label': 'Port' });
   port.addEventListener('change', () => setSetting({ port: Math.max(0, Math.min(65535, +port.value || 0)) }));
 
-  Object.assign(controls, { name, delay, delayValue, delayFill, dead, swap, clip, lock, login, hotkey, port });
+  Object.assign(controls, { name, delay, delayValue, delayFill, dead, swap, clip, lock, shake, login, hotkey, port });
   const isWindows = app.info?.platform === 'windows';
   page.replaceChildren(
     h('h2.section-title', {}, 'Settings'),
@@ -202,6 +203,7 @@ function buildSettings() {
       settingRow('Sync clipboard', 'Copy on one machine, paste on the next: the text clipboard follows the pointer (text only).', clip.el),
       settingRow('Hotkey', h('span', {}, 'Hold these with ', h('span.eh-kbd-row', {}, h('span.kbd', {}, '←'), h('span.kbd', {}, '→'), h('span.kbd', {}, '↑'), h('span.kbd', {}, '↓')), ' to move control to a neighbour, or with ', h('span.kbd', {}, 'Home'), ' to bring the pointer back to the machine you are typing on.'), h('span.select', {}, hotkey)),
       settingRow('Hide the pointer here while it is on another machine', 'Parks and hides this machine’s pointer so a second cursor does not sit on screen.', lock.el),
+      settingRow('Shake the mouse to find the pointer', 'Shake the mouse quickly to show a ring around the pointer, on whichever computer it is on.', shake.el),
       settingRow('Launch at login', isWindows ? 'Start Edgehop in the notification area when you sign in.' : 'Available in the Windows and macOS apps.', login.el),
       settingRow('Port', 'TCP port other machines connect to. Takes effect after a restart; 0 picks any free port.', h('div.row.gap-2', {}, port, h('span.hint', { id: 'set-port-now' })))));
   settingsBuilt = true;
@@ -219,6 +221,7 @@ function fillSettings() {
   c.swap.input.checked = !!s.swapCmdCtrl;
   c.clip.input.checked = !!s.clipboardSync;
   c.lock.input.checked = !!s.lockCursorWhileRemote;
+  c.shake.input.checked = s.shakeToLocate !== false;
   c.login.input.checked = !!s.launchAtLogin;
   c.login.input.disabled = app.info?.platform === 'linux';
   if (![...c.hotkey.options].some((o) => o.value === s.hotkeySwitch)) c.hotkey.append(h('option', { value: s.hotkeySwitch }, s.hotkeySwitch));

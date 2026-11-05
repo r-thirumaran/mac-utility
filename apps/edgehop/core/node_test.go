@@ -48,16 +48,11 @@ func stubMachines(t *testing.T, plats ...string) (*stubNet, []*machine) {
 			}
 		}
 	}
+	waitDisplays(t, ms...)
 	return net, ms
 }
 
-func rowLayout(ms ...*machine) Layout {
-	l := Layout{}
-	for i, m := range ms {
-		l.Tiles = append(l.Tiles, Tile{ID: m.ID(), Col: i, Row: 0})
-	}
-	return l
-}
+func rowLayout(ms ...*machine) Layout { return canvasRow(ms...) }
 
 func TestStubEdgeSwitchAndForwarding(t *testing.T) {
 	_, ms := stubMachines(t, "linux", "linux")
@@ -65,7 +60,7 @@ func TestStubEdgeSwitchAndForwarding(t *testing.T) {
 	if err := a.node.SetLayout(rowLayout(a, b)); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, "layout on B", func() bool { return len(b.node.Layout().Tiles) == 2 })
+	waitFor(t, "layout on B", func() bool { return len(b.node.Layout().Machines) == 2 })
 	a.clip.SetText("copied on A")
 
 	// Pointer to A's right edge in the middle row.
@@ -139,7 +134,7 @@ func TestStubCornersButtonsAndOfflineNeighbour(t *testing.T) {
 	if err := a.node.SetLayout(rowLayout(a, b)); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, "layout on B", func() bool { return len(b.node.Layout().Tiles) == 2 })
+	waitFor(t, "layout on B", func() bool { return len(b.node.Layout().Machines) == 2 })
 
 	// Corner dead zone: no switch in the top 32 px of the edge.
 	a.dev.SetCursor(1900, 10)
@@ -211,7 +206,7 @@ func TestStubThreeNodesAndClaim(t *testing.T) {
 	if err := a.node.SetLayout(rowLayout(a, b, c)); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, "layout everywhere", func() bool { return len(b.node.Layout().Tiles) == 3 && len(c.node.Layout().Tiles) == 3 })
+	waitFor(t, "layout everywhere", func() bool { return len(b.node.Layout().Machines) == 3 && len(c.node.Layout().Machines) == 3 })
 
 	a.dev.SetCursor(1900, 540)
 	a.move(5000, 0)
@@ -330,7 +325,7 @@ func TestStubSwapCmdCtrlCrossPlatform(t *testing.T) {
 	if err := mac.node.SetLayout(rowLayout(mac, win)); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, "layout", func() bool { return len(win.node.Layout().Tiles) == 2 })
+	waitFor(t, "layout", func() bool { return len(win.node.Layout().Machines) == 2 })
 	mac.dev.SetCursor(1900, 540)
 	mac.move(5000, 0)
 	waitFor(t, "win active", func() bool { return win.active() == win.ID() })
@@ -367,7 +362,7 @@ func TestStubLayoutNewestWinsAndForget(t *testing.T) {
 	if err := a.node.SetLayout(rowLayout(a, b)); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, "layout on B", func() bool { return len(b.node.Layout().Tiles) == 2 })
+	waitFor(t, "layout on B", func() bool { return len(b.node.Layout().Machines) == 2 })
 	// An older layout from a peer is ignored.
 	old := Layout{UpdatedAt: 1, Tiles: []Tile{{ID: a.ID(), Col: 0, Row: 1}}}
 	b.node.OnPeerMessage(a.ID(), MustControl(LayoutMsg{T: TLayout, UpdatedAt: old.UpdatedAt, Tiles: old.Tiles}))
@@ -375,20 +370,33 @@ func TestStubLayoutNewestWinsAndForget(t *testing.T) {
 	if len(b.node.Layout().Tiles) != 2 {
 		t.Fatal("older layout replaced the current one")
 	}
-	// B edits: its layout is newer and wins on A.
+	// A tiles-only layout from a v1 peer is arranged on the canvas and kept
+	// as v2 from there on.
 	b.clock.Advance(time.Minute)
-	l := Layout{Tiles: []Tile{{ID: a.ID(), Col: 2, Row: 2}, {ID: b.ID(), Col: 2, Row: 3}}}
+	v1 := Layout{UpdatedAt: b.clock.Now().UnixMilli(), Tiles: []Tile{{ID: a.ID(), Col: 0, Row: 0}, {ID: b.ID(), Col: 1, Row: 0}}}
+	b.node.OnPeerMessage(a.ID(), MustControl(LayoutMsg{T: TLayout, UpdatedAt: v1.UpdatedAt, Tiles: v1.Tiles}))
+	waitFor(t, "v1 layout converted on B", func() bool {
+		p, ok := b.node.Layout().Placement(b.ID())
+		return ok && p.X == 1920
+	})
+	// B edits the canvas: its layout is newer and wins on A.
+	b.clock.Advance(time.Minute)
+	l := Layout{Machines: []Placement{{ID: a.ID(), X: 0, Y: 1080}, {ID: b.ID(), X: 0, Y: 0}}}
 	if err := b.node.SetLayout(l); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, "layout on A", func() bool {
-		tl, ok := a.node.Layout().Tile(b.ID())
-		return ok && tl.Row == 3
+		p, ok := a.node.Layout().Placement(a.ID())
+		return ok && p.Y == 1080
 	})
-	if _, ok := b.node.Layout().Tile(a.ID()); !ok {
-		t.Fatal("tile missing")
+	if _, ok := b.node.Layout().Placement(a.ID()); !ok {
+		t.Fatal("placement missing")
 	}
-	// Forget removes the tile and the peer.
+	// The derived tiles still describe up/down for a v1 peer.
+	if tl, ok := a.node.Layout().Tile(a.ID()); !ok || tl.Row != 1 {
+		t.Fatalf("derived tile for A = %+v %v", tl, ok)
+	}
+	// Forget removes the placement and the peer.
 	if err := a.node.Forget(b.ID()); err != nil {
 		t.Fatal(err)
 	}
@@ -433,4 +441,122 @@ func TestStateShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, "name on B", func() bool { return ms[1].node.State().Peers[0].Name == "Renamed" })
+}
+
+func TestStubEnterPointHonouredAndSnapped(t *testing.T) {
+	_, ms := stubMachines(t, "linux", "linux")
+	a, b := ms[0], ms[1]
+	// enter.pt wins over edge+frac (which would land at y = 972).
+	b.node.OnPeerMessage(a.ID(), MustControl(ActiveMsg{
+		T: TActive, ID: b.ID(), From: a.ID(), Seq: 2,
+		Enter: &Enter{Edge: EdgeLeft, Frac: 0.9, Pt: &Point{X: 42, Y: 99}},
+	}))
+	waitMoveTo(t, b, 42, 99)
+	// A point off the receiver's desktop is snapped onto a display.
+	b.node.OnPeerMessage(a.ID(), MustControl(ActiveMsg{
+		T: TActive, ID: b.ID(), From: a.ID(), Seq: 3,
+		Enter: &Enter{Edge: EdgeLeft, Frac: 0.5, Pt: &Point{X: -500, Y: 9000}},
+	}))
+	waitMoveTo(t, b, 0, 1079)
+	// Without pt a v1 `active` still uses edge + frac.
+	b.node.OnPeerMessage(a.ID(), MustControl(ActiveMsg{
+		T: TActive, ID: b.ID(), From: a.ID(), Seq: 4,
+		Enter: &Enter{Edge: EdgeLeft, Frac: 0.25},
+	}))
+	waitMoveTo(t, b, 1, 270)
+}
+
+func TestStubUnknownControlIsIgnored(t *testing.T) {
+	_, ms := stubMachines(t, "linux", "linux")
+	a, b := ms[0], ms[1]
+	// §6: an unknown control `t` must be dropped, not answered with an error
+	// and not a reason to close the connection (unlike an unknown type byte).
+	for _, body := range []any{
+		map[string]any{"t": "locate", "extra": 1},
+		map[string]any{"t": "future_thing", "x": []int{1, 2}},
+		map[string]any{"t": "nope"},
+	} {
+		b.node.OnPeerMessage(a.ID(), MustControl(body))
+	}
+	time.Sleep(20 * time.Millisecond)
+	if !b.online(a) || !a.online(b) {
+		t.Fatal("an unknown control closed the connection")
+	}
+	// The link still works afterwards.
+	b.node.OnPeerMessage(a.ID(), EncodeMouseMove(4, 4))
+	waitFor(t, "input still accepted", func() bool { return b.count("MoveRelative") >= 1 })
+}
+
+func TestStubShakeToLocate(t *testing.T) {
+	_, ms := stubMachines(t, "linux", "linux")
+	a, b := ms[0], ms[1]
+	if err := a.node.SetLayout(rowLayout(a, b)); err != nil {
+		t.Fatal(err)
+	}
+	// Active here and not macOS: the overlay is shown locally.
+	a.shake()
+	waitFor(t, "overlay on A", func() bool { return a.loc.count() == 1 })
+
+	// Forwarding: the shake travels to the active machine instead.
+	a.dev.SetCursor(1900, 540)
+	a.move(5000, 0)
+	waitFor(t, "B active", func() bool { return a.active() == b.ID() })
+	a.clock.Advance(ShakeCooldown)
+	a.shake()
+	waitFor(t, "overlay on B", func() bool { return b.loc.count() == 1 })
+	if a.loc.count() != 1 {
+		t.Fatalf("A showed the overlay again (%d)", a.loc.count())
+	}
+
+	// Switched off, nothing happens at all.
+	s := a.node.Settings()
+	s.ShakeToLocate = false
+	if err := a.node.SetSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	a.clock.Advance(ShakeCooldown)
+	a.shake()
+	time.Sleep(30 * time.Millisecond)
+	if b.loc.count() != 1 || a.loc.count() != 1 {
+		t.Fatalf("locate fired while switched off (A %d, B %d)", a.loc.count(), b.loc.count())
+	}
+}
+
+func TestStubShakeOnMacOSIsLeftToTheOS(t *testing.T) {
+	_, ms := stubMachines(t, "macos", "linux")
+	mac := ms[0]
+	// macOS has its own shake-to-locate, so an active Mac does nothing.
+	mac.shake()
+	time.Sleep(30 * time.Millisecond)
+	if mac.loc.count() != 0 {
+		t.Fatalf("macOS showed its own overlay (%d)", mac.loc.count())
+	}
+}
+
+func TestStubPeerDisplaysPersistAndDrawOffline(t *testing.T) {
+	_, ms := stubMachines(t, "linux", "linux")
+	a, b := ms[0], ms[1]
+	if err := a.node.SetLayout(rowLayout(a, b)); err != nil {
+		t.Fatal(err)
+	}
+	// B's displays reached A's config, so a fresh node on the same store
+	// still knows where B's screens are (and keeps its boundaries).
+	waitFor(t, "B's displays stored on A", func() bool {
+		p, ok := a.store.Peer(b.ID())
+		return ok && len(p.Displays) == 1 && p.Displays[0].W == 1920
+	})
+	fresh := New(Config{ID: a.ID(), Name: "A2", Plat: "linux", Store: a.store, Capturer: a.dev, Injector: a.dev, Now: a.clock.Now})
+	bs := Boundaries(fresh.Layout(), a.ID(), fresh.allDisplays())
+	if len(bs) != 1 || bs[0].Target != b.ID() || bs[0].Edge != EdgeRight {
+		t.Fatalf("boundaries from the stored displays = %+v", bs)
+	}
+	// An offline peer is still listed with its last known displays.
+	a.node.PeerDown(b.ID())
+	st := a.node.State()
+	if len(st.Peers) != 1 || st.Peers[0].Status != "offline" || len(st.Peers[0].Displays) != 1 {
+		t.Fatalf("offline peer = %+v", st.Peers)
+	}
+	if st.Layout.Machines == nil {
+		t.Fatal("state layout has no machines field")
+	}
 }

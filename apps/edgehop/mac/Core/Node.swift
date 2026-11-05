@@ -43,6 +43,8 @@ final class Node {
         var clipboard: TextClipboard?
         /// Reported verbatim in the state (the macOS permission badges).
         var permissions: () -> [String: Bool]
+        /// Spec §6: flashes the locate ring at this machine's cursor.
+        var showLocate: (() -> Void)?
     }
 
     /// What the node knows about one peer beyond the store.
@@ -101,6 +103,7 @@ final class Node {
 
     private var ticker: DispatchSourceTimer?
     private var started = false
+    private var shake = ShakeDetector()
 
     // MARK: - Lifecycle
 
@@ -123,8 +126,16 @@ final class Node {
             record.plat = p.plat
             record.addr = p.lastAddr
             record.pk = p.staticPub
+            record.displays = p.displays
             peers[p.id] = record
         }
+        // Spec §4: a config written before layout v2 carries only `tiles`; convert it once so
+        // everything below works on the canvas, and write the placements back.
+        let upgraded = layout.upgraded(displays: displaysByMachine())
+        if upgraded != layout.normalized() {
+            try? config.store.setLayout(upgraded)
+        }
+        layout = upgraded
     }
 
     /// Records the port the transport actually listens on (for the state and `info`).
@@ -218,6 +229,21 @@ final class Node {
         peers[id]?.online ?? false
     }
 
+    /// Every machine's displays: this one live, each peer's live while it is online and its
+    /// last known list otherwise (spec §4).
+    private func displaysByMachine() -> [String: [Display]] {
+        var out: [String: [Display]] = [id: displays]
+        for (peerID, p) in peers where !p.displays.isEmpty {
+            out[peerID] = p.displays
+        }
+        return out
+    }
+
+    /// The shared canvas of spec §1, rebuilt from the current layout and display lists.
+    private func world() -> Geometry.World {
+        Geometry.World(layout: layout, displays: displaysByMachine())
+    }
+
     private func role() -> String {
         if !isSelf(active) { return "sending" }
         if let last = lastRemoteInput, Date().timeIntervalSince(last) < Node.receivingWindow {
@@ -298,19 +324,21 @@ final class Node {
         emitState()
     }
 
-    /// Validates, stamps, stores and broadcasts a layout edited here.
+    /// Validates (spec §1), stamps, stores and broadcasts a layout edited here. A legacy
+    /// `{tiles}` layout is converted to the canvas first (spec §4).
     func setLayout(_ edited: Layout) throws {
         try edited.validate()
-        var l = edited
+        let known = displaysByMachine()
+        var l = edited.upgraded(displays: known)
+        try l.validateOverlaps(displays: known)
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         if l.updatedAt <= layout.updatedAt || l.updatedAt == 0 {
             l.updatedAt = max(now, layout.updatedAt + 1)
         }
-        l = l.normalized()
         try config.store.setLayout(l)
         layout = l
         broadcast(Wire.LayoutMessage(layout: l))
-        log("info", "layout saved (\(l.tiles.count) tiles)")
+        log("info", "layout saved (\(l.machines.count) machines on the canvas)")
         emitState()
     }
 
@@ -322,6 +350,9 @@ final class Node {
         guard let device = config.device else { return }
         displays = device.displays()
         broadcast(Wire.Info(t: Wire.tDisplays, displays: displays))
+        // Spec §2: the boundaries are derived from the layout plus the display lists, so the
+        // derived v1 tiles are refreshed here too (the placements themselves do not move).
+        layout = layout.upgraded(displays: displaysByMachine())
         log("info", "displays changed: \(displays.count)")
         emitState()
     }
@@ -344,7 +375,7 @@ final class Node {
         config.store.setLastAddr(peer.id, addr)
         config.store.updatePeerInfo(peer.id, name: peer.name, plat: peer.plat)
         send(infoMessage(Wire.tInfo), to: peer.id)
-        if !layout.tiles.isEmpty {
+        if !layout.isEmpty {
             send(Wire.LayoutMessage(layout: layout), to: peer.id)
         }
         log("info", "connected to \(peer.name) (\(peer.plat))")
@@ -444,6 +475,9 @@ final class Node {
                 return
             }
             p.displays = m.displays ?? []
+            // Spec §4: remembered so this peer still has a place (and boundaries) on the
+            // canvas while it is offline.
+            config.store.setPeerDisplays(p.id, p.displays)
             if t == Wire.tInfo {
                 if let n = m.name, !n.isEmpty { p.name = n }
                 if let pl = m.plat, !pl.isEmpty { p.plat = pl }
@@ -465,7 +499,8 @@ final class Node {
                 return
             }
             if l.updatedAt > layout.updatedAt {
-                layout = l.normalized()
+                // Spec §4: `machines` wins; a v1 peer sends only `tiles`, which convert.
+                layout = l.upgraded(displays: displaysByMachine())
                 try? config.store.setLayout(layout)
                 log("info", "layout updated by \(peerName(p.id))")
                 emitState()
@@ -520,10 +555,17 @@ final class Node {
             guard let m = try? Wire.parse(Wire.SecureInput.self, from: body) else { return }
             p.secureInput = m.on
             emitState()
+        case Wire.tLocate:
+            // Spec §6: the machine holding the mouse shook it; show the ring here.
+            guard settings.shakeToLocate else { return }
+            log("debug", "locate from \(peerName(p.id))")
+            config.showLocate?()
         case Wire.tError:
             let m = try? Wire.parse(Wire.ErrorMessage.self, from: body)
             log("warn", "\(peerName(p.id)) reports error \(m?.code ?? ""): \(m?.message ?? "")")
         default:
+            // Spec §6: an unknown control `t` must be IGNORED (only an unknown frame TYPE
+            // byte closes the connection, in `Wire.decode`).
             log("debug", "unknown control \"\(t)\" from \(peerName(p.id))")
         }
     }
@@ -553,13 +595,17 @@ final class Node {
         }
     }
 
-    /// §6.1 rule 4 after `active` was set to self.
+    /// §6.1 rule 4 after `active` was set to self. Spec §3 rule 4: an `enter.pt` places the
+    /// cursor exactly there (snapped onto a real display); without it, edge + frac as before.
     private func becomeActiveLocal(enter: Wire.Enter?, buttons: UInt8, mods: UInt8) {
         lastNamedActive = Date()
         forwardedToActive = false
         edgePending = nil
+        shake.reset()
         let point: Geometry.Point
-        if let enter {
+        if let pt = enter?.pt {
+            point = Geometry.entryPoint(pt: pt.point, displays: displays)
+        } else if let enter {
             point = Geometry.entryPoint(edge: enter.edge, frac: enter.frac, displays: displays)
         } else {
             point = Geometry.centre(displays)
@@ -658,6 +704,12 @@ final class Node {
             return false
         }
         switch event.kind {
+        case .mouseMove:
+            // Spec §6: detected from the raw deltas of the physical mouse, whether or not
+            // this machine is forwarding.
+            if settings.shakeToLocate, shake.feed(dx: event.dx, at: Date()) {
+                shakeDetected()
+            }
         case .mouseButton:
             if event.down {
                 buttons |= Node.buttonBit(event.button)
@@ -693,6 +745,15 @@ final class Node {
         return true
     }
 
+    /// Spec §6: this machine's pointer was shaken. When it drives a remote machine the ring
+    /// belongs there, so send `locate`; when it is active itself macOS already has its own
+    /// shake-to-locate, so do nothing.
+    private func shakeDetected() {
+        guard !isSelf(active) else { return }
+        log("debug", "shake: asking \(peerName(active)) to show the pointer")
+        send(Wire.Locate(), to: active)
+    }
+
     private func forward(_ event: InputEvent) {
         let frame: Data
         switch event.kind {
@@ -717,19 +778,22 @@ final class Node {
         send(frame, to: active)
     }
 
-    /// §6.1 rules 2–3 for the active machine.
+    /// Spec §3 (replaces §6.1 step 2): the pointer is on an outer edge and a boundary segment
+    /// faces it, so control hops to the machine on the other side. The timer, the switch delay
+    /// and the "no buttons held" rule are unchanged.
     private func checkEdge(_ p: Geometry.Point) {
-        guard let hit = Geometry.edgeHit(p, displays: displays, deadZone: settings.edgeCornerDeadZonePx) else {
+        guard let hop = Geometry.hop(world: world(), machine: id, point: p,
+                                     deadZone: settings.edgeCornerDeadZonePx) else {
             edgePending = nil
             return
         }
-        guard let target = layout.neighbour(of: id, hit.edge), peerOnline(target), buttons == 0 else {
+        guard peerOnline(hop.target), buttons == 0 else {
             edgePending = nil
             return
         }
         let now = Date()
-        if edgePending != hit.edge {
-            edgePending = hit.edge
+        if edgePending != hop.edge {
+            edgePending = hop.edge
             edgeSince = now
         }
         let delay = Double(settings.switchDelayMs) / 1000
@@ -744,7 +808,8 @@ final class Node {
             DispatchQueue.main.asyncAfter(deadline: .now() + remaining, execute: item)
             return
         }
-        handOver(to: target, enter: Wire.Enter(edge: hit.edge.opposite, frac: hit.frac))
+        handOver(to: hop.target,
+                 enter: Wire.Enter(edge: hop.edge.opposite, frac: hop.frac, pt: hop.point))
     }
 
     /// Re-checks the edge once the switch delay elapsed.
@@ -831,6 +896,21 @@ final class Node {
         return mods & ~all == 0
     }
 
+    /// Spec §3 hotkeys: the machine with a boundary on that side of the ACTIVE machine (the
+    /// segment nearest the pointer along the edge, ties to the largest), else the nearest
+    /// world-union centre in that direction inside a ±60° cone.
+    private func hotkeyTarget(_ direction: Edge) -> String? {
+        let cursor: Geometry.Point
+        if isSelf(active), let device = config.device {
+            cursor = device.cursorPosition()
+        } else {
+            // Not our pointer: aim from the middle of the active machine's desktop.
+            let u = Geometry.union(displaysByMachine()[active] ?? [])
+            cursor = Geometry.Point(x: u.x + u.w / 2, y: u.y + u.h / 2)
+        }
+        return Geometry.hotkeyTarget(world: world(), machine: active, direction: direction, cursor: cursor)
+    }
+
     /// §6.2; returns `true` when the event was a hotkey.
     private func hotkeyPressed(_ event: InputEvent) -> Bool {
         let m = event.mods == 0 ? mods : event.mods
@@ -849,8 +929,8 @@ final class Node {
         default:
             return false
         }
-        guard let target = layout.neighbour(of: active, direction) else {
-            log("debug", "hotkey \(direction.rawValue): no neighbour")
+        guard let target = hotkeyTarget(direction) else {
+            log("debug", "hotkey \(direction.rawValue): nothing that way")
             return true
         }
         if isSelf(target) {

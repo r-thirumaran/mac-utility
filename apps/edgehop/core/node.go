@@ -33,6 +33,19 @@ type Sender interface {
 	Disconnect(peerID string)
 }
 
+// Locator shows the shake-to-locate overlay around the local cursor
+// (docs/edgehop-protocol.md §6.3 `locate`). Platforms without an overlay
+// (macOS has its own) leave Config.Locator nil.
+type Locator interface {
+	ShowLocate()
+}
+
+// LocatorFunc adapts a function to Locator.
+type LocatorFunc func()
+
+// ShowLocate calls f.
+func (f LocatorFunc) ShowLocate() { f() }
+
 // Clipboard is the local text clipboard.
 type Clipboard interface {
 	Text() (string, bool)
@@ -117,6 +130,8 @@ type Config struct {
 	Permissions map[string]any
 	// Logf receives every log line in addition to the edgehop.log event.
 	Logf func(level, msg string)
+	// Locator shows the shake-to-locate overlay; nil = no overlay here.
+	Locator Locator
 }
 
 type peerState struct {
@@ -145,6 +160,11 @@ type Node struct {
 	layout   Layout
 	settings Settings
 	hotkey   []uint8 // modifier families that must be held
+
+	bounds      []Boundary // boundary segments of this machine (§6.1)
+	boundsValid bool
+	shake       *ShakeDetector
+	lastCursor  Point
 
 	active            string
 	seq               uint32
@@ -192,14 +212,47 @@ func New(cfg Config) *Node {
 	n.layout = cfg.Store.Layout()
 	n.settings = cfg.Store.Settings().Normalize()
 	n.hotkey = parseHotkey(n.settings.HotkeySwitch)
+	n.shake = NewShakeDetector()
 	if cfg.Capturer != nil {
 		n.displays = cfg.Capturer.Displays()
 	}
 	for _, p := range cfg.Store.Peers() {
-		n.peers[p.ID] = &peerState{id: p.ID, name: p.Name, plat: p.Plat, addr: p.LastAddr, pk: p.StaticPub}
+		n.peers[p.ID] = &peerState{id: p.ID, name: p.Name, plat: p.Plat, addr: p.LastAddr, pk: p.StaticPub, displays: p.Displays}
+	}
+	n.lastCursor = Centre(n.displays)
+	// A config file written by v1 (or by a v1 peer) has tiles only: put the
+	// machines on the canvas once, here, and write it back (§6 `layout`).
+	if l, changed := n.layout.Upgraded(n.allDisplays()); changed {
+		n.layout = l.Normalized()
+		_ = cfg.Store.SetLayout(n.layout)
 	}
 	return n
 }
+
+// allDisplays is the canvas input: this machine's live displays plus every
+// peer's last known ones (live while online, from the config otherwise).
+func (n *Node) allDisplays() map[string][]Display {
+	out := map[string][]Display{n.cfg.ID: n.displays}
+	for id, p := range n.peers {
+		if len(p.displays) > 0 {
+			out[id] = p.displays
+		}
+	}
+	return out
+}
+
+// boundaries returns the cached boundary segments of this machine,
+// recomputing them after a layout or display change.
+func (n *Node) boundaries() []Boundary {
+	if !n.boundsValid {
+		n.bounds = Boundaries(n.layout, n.cfg.ID, n.allDisplays())
+		n.boundsValid = true
+	}
+	return n.bounds
+}
+
+// invalidateBoundaries forces the next boundaries() to recompute.
+func (n *Node) invalidateBoundaries() { n.boundsValid = false }
 
 // ID returns this machine's id.
 func (n *Node) ID() string { return n.cfg.ID }
@@ -431,6 +484,9 @@ func (n *Node) stateLocked() State {
 	if layout.Tiles == nil {
 		layout.Tiles = []Tile{}
 	}
+	if layout.Machines == nil {
+		layout.Machines = []Placement{}
+	}
 	return State{Self: self, Peers: peers, Layout: layout, Active: n.active, Role: n.role(), Permissions: perms, Settings: n.settings, Port: n.port}
 }
 
@@ -499,11 +555,15 @@ func (n *Node) Layout() Layout {
 }
 
 // SetLayout validates, stamps, stores and broadcasts a layout edited here.
+// It accepts either model: a canvas (`machines`) has its tiles derived for
+// v1 peers, a legacy tile grid is arranged on the canvas (§6 `layout`).
 func (n *Node) SetLayout(l Layout) error {
-	if err := l.Validate(); err != nil {
+	n.mu.Lock()
+	l, _ = l.Upgraded(n.allDisplays())
+	if err := l.ValidatePlacement(n.allDisplays()); err != nil {
+		n.mu.Unlock()
 		return err
 	}
-	n.mu.Lock()
 	now := n.now().UnixMilli()
 	if l.UpdatedAt <= n.layout.UpdatedAt || l.UpdatedAt == 0 {
 		l.UpdatedAt = max(now, n.layout.UpdatedAt+1)
@@ -514,8 +574,9 @@ func (n *Node) SetLayout(l Layout) error {
 		return err
 	}
 	n.layout = l
-	n.broadcast(MustControl(LayoutMsg{T: TLayout, UpdatedAt: l.UpdatedAt, Tiles: l.Tiles}))
-	n.logf("info", "layout saved (%d tiles)", len(l.Tiles))
+	n.invalidateBoundaries()
+	n.broadcast(MustControl(NewLayoutMsg(l)))
+	n.logf("info", "layout saved (%d machines)", len(l.Machines))
 	n.emitState()
 	n.runActions()
 	return nil
@@ -543,6 +604,7 @@ func (n *Node) displaysChanged() {
 	d := n.cfg.Capturer.Displays()
 	n.mu.Lock()
 	n.displays = d
+	n.invalidateBoundaries()
 	n.broadcast(MustControl(InfoMsg{T: TDisplays, Displays: d}))
 	n.logf("info", "displays changed: %d", len(d))
 	n.emitState()
@@ -566,8 +628,8 @@ func (n *Node) PeerUp(info securechan.PeerInfo, addr string) {
 	_ = n.cfg.Store.SetLastAddr(info.ID, addr)
 	_ = n.cfg.Store.UpdatePeerInfo(info.ID, info.Name, info.Plat)
 	n.send(info.ID, MustControl(n.infoMsg(TInfo)))
-	if len(n.layout.Tiles) > 0 {
-		n.send(info.ID, MustControl(LayoutMsg{T: TLayout, UpdatedAt: n.layout.UpdatedAt, Tiles: n.layout.Tiles}))
+	if len(n.layout.Machines) > 0 || len(n.layout.Tiles) > 0 {
+		n.send(info.ID, MustControl(NewLayoutMsg(n.layout)))
 	}
 	n.logf("info", "connected to %s (%s)", info.Name, info.Plat)
 	n.emitState()
@@ -657,6 +719,7 @@ func (n *Node) Forget(id string) error {
 	}
 	n.mu.Lock()
 	n.layout = n.cfg.Store.Layout()
+	n.invalidateBoundaries()
 	if p, ok := n.peers[id]; ok {
 		p.online = false
 		if !p.discovered {
@@ -712,6 +775,8 @@ func (n *Node) handleControl(p *peerState, msg Message) {
 			return
 		}
 		p.displays = m.Displays
+		_ = n.cfg.Store.SetPeerDisplays(p.id, m.Displays)
+		n.invalidateBoundaries()
 		if msg.T == TInfo {
 			if m.Name != "" {
 				p.name = m.Name
@@ -736,7 +801,11 @@ func (n *Node) handleControl(p *peerState, msg Message) {
 			return
 		}
 		if l.UpdatedAt > n.layout.UpdatedAt {
+			// A v1 peer sends tiles only: arrange them on the canvas and keep
+			// it as v2 from here on (§6 `layout`).
+			l, _ = l.Upgraded(n.allDisplays())
 			n.layout = l.Normalized()
+			n.invalidateBoundaries()
 			_ = n.cfg.Store.SetLayout(n.layout)
 			n.logf("info", "layout updated by %s", n.peerName(p.id))
 			n.emitState()
@@ -800,6 +869,8 @@ func (n *Node) handleControl(p *peerState, msg Message) {
 		}
 		n.send(p.id, MustControl(PingMsg{T: TPong, TS: m.TS}))
 	case TPong, TAuth, TAuthOK:
+	case TLocate:
+		n.showLocate("asked by " + n.peerName(p.id))
 	case TSecureInput:
 		var m SecureInputMsg
 		if err := msg.ParseControl(&m); err != nil {
@@ -854,11 +925,16 @@ func (n *Node) becomeActiveLocal(enter *Enter, buttons, mods uint8) {
 	n.forwardedToActive = false
 	n.edgePending = ""
 	var p Point
-	if enter != nil && enter.Edge.Valid() {
+	switch {
+	case enter != nil && enter.Pt != nil:
+		// Layout v2: the sender computed the exact point on the canvas.
+		p = SnapToDisplays(*enter.Pt, n.displays)
+	case enter != nil && enter.Edge.Valid():
 		p = EntryPoint(enter.Edge, enter.Frac, n.displays)
-	} else {
+	default:
 		p = Centre(n.displays)
 	}
+	n.lastCursor = p
 	cap, inj := n.cfg.Capturer, n.cfg.Injector
 	n.after(func() {
 		if cap != nil {
@@ -896,6 +972,33 @@ func (n *Node) releaseModifiers() {
 			}
 		}
 	})
+}
+
+// locateRequested acts on a shake detected from the physical mouse here: on
+// the active machine show the overlay locally (macOS has its own
+// shake-to-locate, so nothing to do there), otherwise ask the active machine
+// to show it (§6.3).
+func (n *Node) locateRequested() {
+	if n.isSelf(n.active) {
+		if n.self.Plat == "macos" {
+			return
+		}
+		n.showLocate("shake")
+		return
+	}
+	n.logf("debug", "locate → %s (shake)", n.peerName(n.active))
+	n.send(n.active, MustControl(LocateMsg{T: TLocate}))
+}
+
+// showLocate runs the local overlay, if this platform has one.
+func (n *Node) showLocate(why string) {
+	loc := n.cfg.Locator
+	if loc == nil {
+		n.logf("debug", "locate (%s): no overlay on this platform", why)
+		return
+	}
+	n.logf("debug", "locate (%s)", why)
+	n.after(loc.ShowLocate)
 }
 
 func (n *Node) handleInput(p *peerState, msg Message) {
@@ -985,10 +1088,20 @@ func buttonBit(b input.Button) uint8 {
 
 func (n *Node) localInput(ev input.Event) bool {
 	if ev.Injected {
-		if ev.Kind == input.MouseMove && n.isSelf(n.active) {
-			n.checkEdge(Point{ev.X, ev.Y})
+		if ev.Kind == input.MouseMove {
+			n.lastCursor = Point{ev.X, ev.Y}
+			if n.isSelf(n.active) {
+				n.checkEdge(Point{ev.X, ev.Y})
+			}
 		}
 		return false
+	}
+	if ev.Kind == input.MouseMove {
+		// Shake to locate runs on whichever machine owns the physical mouse,
+		// forwarding or not (§6.3).
+		if n.shake.Feed(ev.DX, ev.DY, n.now()) && n.settings.ShakeToLocate {
+			n.locateRequested()
+		}
 	}
 	switch ev.Kind {
 	case input.MouseButton:
@@ -1058,21 +1171,24 @@ func (n *Node) forward(ev input.Event) {
 	n.send(n.active, frame)
 }
 
-// checkEdge implements §6.1 rules 2–3 for the active machine.
+// checkEdge implements §6.1 rules 2–3 for the active machine: the pointer
+// must sit inside a boundary segment of the canvas, outside the corner dead
+// zones, with no button held, for switchDelayMs.
 func (n *Node) checkEdge(p Point) {
-	edge, frac, ok := EdgeHit(p, n.displays, n.settings.EdgeCornerDeadZonePx)
-	if !ok {
+	n.lastCursor = p
+	me, placed := n.layout.Placement(n.cfg.ID)
+	if !placed {
 		n.edgePending = ""
 		return
 	}
-	target, ok := n.layout.Neighbour(n.cfg.ID, edge)
-	if !ok || !n.peerOnline(target) || n.buttons != 0 {
+	hop, ok := HopAt(p, n.displays, me, n.boundaries(), n.settings.EdgeCornerDeadZonePx)
+	if !ok || !n.peerOnline(hop.Target) || n.buttons != 0 {
 		n.edgePending = ""
 		return
 	}
 	now := n.now()
-	if n.edgePending != edge {
-		n.edgePending = edge
+	if n.edgePending != hop.Edge {
+		n.edgePending = hop.Edge
 		n.edgeSince = now
 	}
 	delay := time.Duration(n.settings.SwitchDelayMs) * time.Millisecond
@@ -1084,7 +1200,8 @@ func (n *Node) checkEdge(p Point) {
 		n.edgeTimer = time.AfterFunc(remaining, n.edgeTimerFired)
 		return
 	}
-	n.handOver(target, &Enter{Edge: Opposite(edge), Frac: frac})
+	pt := hop.Pt
+	n.handOver(hop.Target, &Enter{Edge: hop.Enter, Frac: hop.Frac, Pt: &pt})
 }
 
 // edgeTimerFired re-checks the edge once the switch delay elapsed.
@@ -1114,6 +1231,9 @@ func (n *Node) handOver(target string, enter *Enter) {
 	where := "centre"
 	if enter != nil {
 		where = fmt.Sprintf("%s edge at %.2f", enter.Edge, enter.Frac)
+		if enter.Pt != nil {
+			where = fmt.Sprintf("%s edge at (%d,%d)", enter.Edge, enter.Pt.X, enter.Pt.Y)
+		}
 	}
 	n.logf("info", "control → %s (%s)", n.peerName(target), where)
 	n.setRemoteActive(target)
@@ -1235,9 +1355,14 @@ func (n *Node) hotkeyPressed(ev input.Event) bool {
 	default:
 		return false
 	}
-	target, ok := n.layout.Neighbour(n.active, dir)
+	var cursor *Point
+	if n.isSelf(n.active) {
+		c := n.lastCursor
+		cursor = &c
+	}
+	target, ok := HotkeyTarget(dir, n.active, n.layout, n.allDisplays(), cursor)
 	if !ok {
-		n.logf("debug", "hotkey %s: no neighbour", dir)
+		n.logf("debug", "hotkey %s: no machine that way", dir)
 		return true
 	}
 	if n.isSelf(target) {

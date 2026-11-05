@@ -16,12 +16,33 @@ Both MUST interoperate byte-for-byte with it.
   machine A and a keyboard attached to machine B both work, and "the keyboard
   follows the mouse" falls out naturally.
 * The **active** machine watches its own cursor. When the cursor is pushed against
-  an outer edge of its desktop that has a neighbour in the **layout**, control
-  moves to that neighbour: the active machine broadcasts `active` naming the
-  neighbour and where the cursor should appear.
-* The **layout** is a grid of tiles (one tile per machine, no gaps required).
-  Neighbours are tiles directly adjacent on the left/right/top/bottom. The layout
-  is edited on any machine and broadcast; the newest `updatedAt` wins.
+  an outer edge of its desktop at a point where another machine's screen is on the
+  other side (a **boundary**), control moves to that machine: the active machine
+  broadcasts `active` naming it and where the cursor should appear.
+* The **layout** is one shared **world canvas**. Every machine reports its displays
+  in `info`/`displays` in native desktop units (macOS points, Windows pixels),
+  origin top-left, y down, the primary display's top-left at (0,0). The layout
+  places each machine on the canvas by an integer offset
+  `placement = {id, x, y}`; the world rect of display `d` of machine `m` is
+  `(m.x + d.x, m.y + d.y, d.w, d.h)`. A machine's displays move together — their
+  relative arrangement belongs to the OS (System Settings ▸ Displays, Windows
+  Display settings) and Edgehop never moves one monitor alone.
+  * A layout is **valid** when no two displays of *different* machines overlap
+    (positive-area intersection), no machine id appears twice, and
+    `|x|, |y| ≤ 1 000 000`.
+  * The canvas is to scale in native units: there is no DPI normalisation between
+    machines, and boundaries are simply where the user made screens touch.
+  * `tiles` (the v1 5×5 grid, one tile per machine) is still carried alongside
+    `machines` so a v1 peer keeps working. See §6 `layout`.
+  * The layout is edited on any machine and broadcast; the newest `updatedAt` wins.
+* **Boundaries.** Two displays A (machine M) and B (machine N, N ≠ M) touch on A's
+  right edge when `|A.right − B.left| ≤ 2` in world units (right = x + w) and their
+  y ranges overlap by at least 1; the **boundary segment** is that y overlap. Same
+  for left/top/bottom with the roles of x and y swapped. The set of segments — per
+  machine, per local display, per edge — follows from the layout plus every
+  machine's last known displays, and is recomputed when either changes. Peers'
+  last known displays are persisted, so an offline machine still occupies the
+  canvas and its boundaries still exist.
 * Machines that are not active keep their own cursor still and hidden (best
   effort) so the user does not see a second pointer drifting.
 
@@ -135,11 +156,12 @@ cross-platform pairs.
 | `auth` / `auth_ok` | first encrypted frames (section 4) | — |
 | `info` | both, right after auth | `name, plat, version, port?, displays: [{id, x, y, w, h, scale, primary}]` — desktop union coordinates, origin top-left, y down (macOS implementations convert from AppKit's flipped coordinates); `port` is the sender's listening TCP port so a peer first reached by a typed address can be re-dialled |
 | `displays` | both, on change | same `displays` field |
-| `layout` | both | `{updatedAt (ms epoch), tiles: [{id, col, row}]}` newest wins; receivers persist it |
-| `active` | the machine handing over control → **every** connected peer | `{id: newActive, from: previousActive, enter: {edge: "left"\|"right"\|"top"\|"bottom", frac: 0..1}, buttons: u8 bitmask, modifiers: u8, seq: u32}` — `enter.edge` is the edge of the **new** machine the cursor arrives on; `frac` is the position along that edge (0 = top/left). `seq` increases per transition; a receiver ignores an `active` with a `seq` lower than the last one seen from any peer |
+| `layout` | both | `{updatedAt (ms epoch), machines: [{id, x, y}], tiles: [{id, col, row}]}` newest wins; receivers persist it. A v2 sender fills **both**: `machines` is the canvas (§1), `tiles` is derived from it for v1 peers. A receiver that sees `machines` uses it and ignores `tiles`; a receiver that sees only `tiles` (a v1 peer, or an old config file) converts and is v2 from then on — see the conversion rules below |
+| `active` | the machine handing over control → **every** connected peer | `{id: newActive, from: previousActive, enter: {edge: "left"\|"right"\|"top"\|"bottom", frac: 0..1, pt?: {x, y}}, buttons: u8 bitmask, modifiers: u8, seq: u32}` — `enter.edge` is the edge of the **new** machine the cursor arrives on; `frac` is the position along that edge (0 = top/left), kept for v1 receivers. `enter.pt` is the exact entry point in the **new** machine's own display coordinates: a receiver that understands it places the cursor there (clamped/snapped onto its displays) and ignores `frac`. `seq` increases per transition; a receiver ignores an `active` with a `seq` lower than the last one seen from any peer |
 | `claim` | a non-active machine asking to become active (hotkey, menu) → every peer | `{id, seq}` — treated like `active` without `enter` |
 | `clipboard` | the machine losing control → the one gaining it | `{kind: "text", text}` (v1: text only; `kind:"png"` + `b64` reserved) |
 | `ping` / `pong` | both, every 5 s | `{ts}` — a peer silent for 15 s is considered gone; if it was active, the machine with the physical pointer that last forwarded to it becomes active again |
+| `locate` | the machine with the physical mouse → the active machine | `{}` (no fields) — show the shake-to-locate overlay at the receiver's current cursor (§6.3). Gated by the sender's `shakeToLocate` setting |
 | `secure_input` | active → peers | `{on: bool}` macOS secure-input mode: senders show a hint that keystrokes are blocked |
 | `error` | either | `{code, message}` then close |
 
@@ -147,19 +169,34 @@ cross-platform pairs.
 
 1. Compute the desktop union `U` (bounding box of all displays) and the per-display
    rectangles.
-2. After every pointer event, let `p` be the cursor position. If `p.x ≤ U.minX`
-   and the layout has a left neighbour **and** a display actually owns the row
-   `p.y` at `U.minX` (no gaps), start the switch timer for edge `left`. Same for
-   the other three edges. Corners: ignore hits within `edgeCornerDeadZonePx`
-   (default 32) of a corner (Hot Corners on macOS live there).
+2. After every pointer event, let `p` be the cursor position on local display `A`
+   of the active machine `M`. `p` must sit on an **outer** edge of `M`'s desktop at
+   that point — `p.x ≤ U.minX` for `left`, the last pixel column for `right`, and
+   so on — with a display actually owning the row `p.y` (or column `p.x`) there, no
+   gaps. Corners: ignore hits within `edgeCornerDeadZonePx` (default 32) of either
+   end of the merged run of displays on that edge (Hot Corners on macOS live
+   there).
+   Then convert to world coordinates, `w = (M.x + p.x, M.y + p.y)`, and look for a
+   boundary segment (§1) on `A`'s matching edge whose span contains `w`'s
+   coordinate along that edge. Additionally ignore hits within
+   `edgeCornerDeadZonePx` of either end of that *segment*, but only where the end
+   is also an end of `M`'s merged run. No segment → no hop: the cursor simply
+   stops, as the OS clamps it.
 3. The pointer must remain on the edge for `switchDelayMs` (default 0, user
-   configurable) with no button held, then: broadcast `active` with
-   `enter.frac = (p.y − U.minY)/U.height` for left/right (or x fraction for
-   top/bottom) and the current button/modifier state; stop treating this machine
-   as active; begin forwarding.
-4. The newly active machine places its cursor at the opposite edge at the same
-   fraction of ITS union, inset by 1 px, un-hides it, and raises any modifiers
-   that the message said were held (so drag-across works).
+   configurable) with no button held, then: broadcast `active` naming the machine
+   `N` that owns the segment, with the current button/modifier state,
+   `enter.frac = (p.y − U.minY)/U.height` for left/right (or the x fraction for
+   top/bottom, for v1 receivers) **and** `enter.pt = q`, the entry point in `N`'s
+   own coordinates: `q = w − (N.x, N.y)`, then placed on the facing edge of the
+   target display `B`, inset 1 px (hopping right: `q.x = B.x + 1`; hopping left:
+   `q.x = B.x + B.w − 2`; and the y equivalents), with the along-edge coordinate
+   clamped into `B`. Then stop treating this machine as active and begin
+   forwarding.
+4. The newly active machine places its cursor at `enter.pt` (clamped and snapped
+   onto one of its displays), or, when the message has no `pt`, at the opposite
+   edge at the same fraction of ITS union inset by 1 px; it un-hides the cursor
+   and raises any modifiers that the message said were held (so drag-across
+   works).
 5. The machine that still owns the physical mouse (the one receiving raw
    hardware events) locks its cursor at the centre of its primary display and
    hides it while it is not active. While forwarding it sends `mouse_move`
@@ -168,25 +205,43 @@ cross-platform pairs.
 
 ### 6.2 Hotkeys
 
-Default `Ctrl+Alt+←/→/↑/↓` (configurable) moves control to the neighbour in that
-direction from the active machine, placing the cursor in the centre of the new
-machine. `Ctrl+Alt+Home` returns control to the machine the hotkey was pressed
+Default `Ctrl+Alt+←/→/↑/↓` (configurable) moves control in that direction from the
+active machine. The target is:
+
+1. the machine sharing a boundary with the active machine on that side — the one
+   whose segment is nearest the cursor along the edge, ties going to the widest
+   segment (with no known cursor, e.g. when the active machine is remote, the
+   widest segment wins);
+2. otherwise the machine whose world-union centre is nearest in that direction
+   within a ±60° cone;
+3. otherwise nothing happens.
+
+The cursor is placed in the centre of the new machine's primary display (no
+`enter`). `Ctrl+Alt+Home` returns control to the machine the hotkey was pressed
 on (`claim`).
 
 ### 6.3 Resolutions (normative; both implementations follow these)
 
 * `seq`: every node keeps the maximum it has seen; `claim` and `active` both increment it; a message with an equal `seq` is accepted, only a smaller one is stale.
-* Entry point: the opposite edge at the same union fraction, inset 1 px; if no display owns that point, the nearest point of any display.
+* Entry point: `enter.pt` when the receiver understands it (clamped and snapped onto one of its displays); otherwise the opposite edge at the same union fraction, inset 1 px, and if no display owns that point, the nearest point of any display.
+* Layout conversion (both directions, deterministic):
+  * `machines` → `tiles`: machines whose world unions overlap vertically form one row; rows are ordered top to bottom; within a row the column is the rank by x centre (ties by id). It only has to preserve left/right and up/down roughly.
+  * `tiles` → `machines`: for each row in ascending order, place the machines left to right by column with each world union touching the previous one's right edge, the row's top at the cumulative height of the rows above it. A machine whose displays are not known yet counts as 1920×1080.
+  * A machine whose displays are unknown contributes no display to the canvas, so it can never overlap another machine.
+* An unknown control `t` MUST be **ignored** (no `error`, no close) so later additions such as `locate` are additive. This is the opposite of an unknown frame **type** byte, which is still an `error` + close (§7).
 * Edge geometry: the right/bottom edge is the last pixel column/row (where the OS clamps the cursor); left/top is `≤ minX/minY`. The corner dead zone is measured along the merged run of displays that touch that edge, so a join between two monitors on one edge is not a corner.
 * Only the machine that was active locks and hides its cursor when control leaves it.
 * Peer vanished (15 s silence or a closed socket): control returns to a machine only if it had forwarded to or handed to that peer (it then sends `claim`); otherwise it reverts to itself silently.
 * Clipboard is sent only by the hand-over side, to the new active machine, only when it holds non-empty text.
+* Shake to locate: the machine receiving the **physical** mouse events watches the raw deltas, whether or not it is forwarding. Within a sliding 600 ms window, 4 or more reversals of horizontal direction where each stroke between reversals travels 40 units or more fire a locate; then 1500 ms of cooldown. If that machine is itself active: macOS does nothing (it has its own shake-to-locate), Windows shows the overlay locally. If it is forwarding, it sends `{"t":"locate"}` to the active machine, which shows the overlay at its own cursor. The overlay is borderless, click-through, topmost, on all Spaces/desktops, about 1 s long: a ring (6 px stroke in the accent colour with a 2 px white outline) shrinking from radius 140 to 28 around the cursor and following it, then fading out; one overlay at a time. The whole feature is gated by the `shakeToLocate` setting (default on).
 * `hello.pair = true` from an unknown key always gets a code (`hello_ack.pair = !known`); the code is shown only on the acceptor.
 * A trusted dial to an acceptor that does not trust the initiator yields `{"t":"error","code":"unpaired"}`; the initiator reports "pair again".
 
 ## 7. Safety and limits
 
 * Frames > 1 MiB, unknown `type` bytes, or malformed JSON → `error` + close.
+  An unknown control `t` is **not** malformed: it is ignored silently (§6.3), so
+  that control messages can be added without breaking older peers.
 * Input is only injected from authenticated peers; machines ignore
   `mouse_*`/`key*` frames while they are not active except within 250 ms after an
   `active` naming them (clock skew tolerance).

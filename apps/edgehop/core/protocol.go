@@ -46,6 +46,7 @@ const (
 	TPing        = "ping"
 	TPong        = "pong"
 	TSecureInput = "secure_input"
+	TLocate      = "locate"
 	TError       = "error"
 )
 
@@ -70,20 +71,34 @@ type InfoMsg struct {
 	Displays []Display `json:"displays"`
 }
 
-// LayoutMsg is `layout`.
+// LayoutMsg is `layout`. A v2 sender fills both Machines (the screen canvas)
+// and Tiles (derived, so a v1 peer keeps working); a v1 sender only fills
+// Tiles and the receiver converts (§6 `layout`).
 type LayoutMsg struct {
-	T         string `json:"t"`
-	UpdatedAt int64  `json:"updatedAt"`
-	Tiles     []Tile `json:"tiles"`
+	T         string      `json:"t"`
+	UpdatedAt int64       `json:"updatedAt"`
+	Machines  []Placement `json:"machines,omitempty"`
+	Tiles     []Tile      `json:"tiles"`
 }
 
 // Layout converts the message to a Layout.
-func (m LayoutMsg) Layout() Layout { return Layout{UpdatedAt: m.UpdatedAt, Tiles: m.Tiles} }
+func (m LayoutMsg) Layout() Layout {
+	return Layout{UpdatedAt: m.UpdatedAt, Machines: m.Machines, Tiles: m.Tiles}
+}
 
-// Enter says where the cursor appears on the newly active machine.
+// NewLayoutMsg builds the `layout` message for l.
+func NewLayoutMsg(l Layout) LayoutMsg {
+	return LayoutMsg{T: TLayout, UpdatedAt: l.UpdatedAt, Machines: l.Machines, Tiles: l.Tiles}
+}
+
+// Enter says where the cursor appears on the newly active machine. Pt is the
+// exact entry point in the new machine's own coordinates (layout v2); a
+// receiver that understands it places the cursor there, otherwise it falls
+// back to Edge + Frac.
 type Enter struct {
 	Edge Edge    `json:"edge"`
 	Frac float64 `json:"frac"`
+	Pt   *Point  `json:"pt,omitempty"`
 }
 
 // ActiveMsg is `active`: control moves to ID. Enter is nil for a hotkey or
@@ -124,6 +139,13 @@ type PingMsg struct {
 type SecureInputMsg struct {
 	T  string `json:"t"`
 	On bool   `json:"on"`
+}
+
+// LocateMsg is `locate`: show the shake-to-locate overlay at the receiver's
+// current cursor position (§6.3). An unknown control `t` is ignored, so a v1
+// peer simply drops it.
+type LocateMsg struct {
+	T string `json:"t"`
 }
 
 // ErrorMsg is `error`.

@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var edgehopBridge: EdgehopBridge?
     private var statusMenu: StatusMenuController?
     private var window: WebWindowController?
+    private let locate = LocateOverlay()
 
     // MARK: - Lifecycle
 
@@ -50,7 +51,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let node = Node(config: Node.Config(id: identity.id, name: name, plat: "macos", version: version,
                                             store: store, device: device, sender: transport,
                                             clipboard: PasteboardClipboard(),
-                                            permissions: { EdgehopBridge.permissions() }))
+                                            permissions: { EdgehopBridge.permissions() },
+                                            showLocate: { [weak self] in self?.locate.show() }))
         let edgehopBridge = EdgehopBridge(bridge: bridge, node: node, transport: transport, version: version)
         self.transport = transport
         self.node = node

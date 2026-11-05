@@ -40,12 +40,13 @@ func TestIntegrationTwoNodes(t *testing.T) {
 	setRowLayout(t, a, b)
 	a.clip.SetText("from Left")
 
-	// A's pointer to its right edge at 25 % height → B active, cursor on B's
-	// left edge at the same fraction of B's (taller) union.
+	// A's pointer to its right edge at y 270 → B active, cursor on B's left
+	// edge at the SAME world row (enter.pt), not at the same union fraction:
+	// the canvas is to scale, so 270 on A is 270 on B although B is taller.
 	a.dev.SetCursor(1900, 270)
 	a.move(5000, 0)
 	waitFor(t, "B active", func() bool { return b.active() == b.ID() && a.active() == b.ID() })
-	waitMoveTo(t, b, 1, 360)
+	waitMoveTo(t, b, 1, 270)
 	waitFor(t, "A locked", a.dev.Locked)
 	waitFor(t, "clipboard", func() bool { s, _ := b.clip.Text(); return s == "from Left" })
 
@@ -246,4 +247,73 @@ func TestIntegrationUnpairedIsRefused(t *testing.T) {
 	if a.online(b) || b.online(a) || a.tr.Connected(b.ID()) {
 		t.Fatal("an unpaired peer got a connection")
 	}
+}
+
+// TestIntegrationBoundaryHopAndLocate is the Go-to-Go proof of layout v2 over
+// the real transport: a boundary that covers only part of the shared edge, a
+// hop that lands exactly on enter.pt, and a shake that travels as `locate`.
+func TestIntegrationBoundaryHopAndLocate(t *testing.T) {
+	a := newMachine(t, "A")
+	b := newMachine(t, "B", Display{ID: "b1", X: 0, Y: 0, W: 2560, H: 1440, Scale: 1, Primary: true})
+	startNet(t, a, "linux")
+	startNet(t, b, "linux")
+	pair(t, a, b)
+	waitDisplays(t, a, b)
+
+	// B sits 600 px lower on the canvas, so only y 600–1080 of A's right edge
+	// is a boundary.
+	l := Layout{Machines: []Placement{{ID: a.ID(), X: 0, Y: 0}, {ID: b.ID(), X: 1920, Y: 600}}}
+	if err := a.node.SetLayout(l); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "canvas on B", func() bool { return len(b.node.Layout().Machines) == 2 })
+	if _, ok := b.node.Layout().Tile(a.ID()); !ok {
+		t.Fatal("no tiles derived for a v1 peer")
+	}
+
+	// Above the boundary the cursor just stops.
+	a.dev.SetCursor(1900, 200)
+	a.move(5000, 0)
+	time.Sleep(30 * time.Millisecond)
+	if a.active() != a.ID() {
+		t.Fatal("hopped where the edge has no boundary")
+	}
+
+	// Inside the boundary: B becomes active with its cursor on the same world
+	// row, i.e. 800 − 600 = 200 in B's own coordinates (enter.pt), not at the
+	// union fraction a v1 receiver would use.
+	a.dev.SetCursor(1900, 800)
+	a.move(5000, 0)
+	waitFor(t, "B active", func() bool { return b.active() == b.ID() && a.active() == b.ID() })
+	waitMoveTo(t, b, 1, 200)
+
+	// A still owns the physical mouse: a shake there asks B for the overlay.
+	a.shake()
+	waitFor(t, "locate overlay on B", func() bool { return b.loc.count() == 1 })
+	if a.loc.count() != 0 {
+		t.Fatal("the forwarding machine showed the overlay itself")
+	}
+
+	// Back on A (hotkey Home), a shake shows the overlay locally.
+	a.key(keymap.ModLeftControl, true)
+	a.key(keymap.ModLeftAlt, true)
+	a.key(usageHome, true)
+	waitFor(t, "A active", func() bool { return a.active() == a.ID() })
+	a.key(usageHome, false)
+	a.key(keymap.ModLeftAlt, false)
+	a.key(keymap.ModLeftControl, false)
+	a.clock.Advance(ShakeCooldown)
+	a.shake()
+	waitFor(t, "locate overlay on A", func() bool { return a.loc.count() == 1 })
+
+	// Hotkey Ctrl+Alt+→ uses the canvas boundary, not a tile grid.
+	a.dev.SetCursor(1900, 800)
+	a.key(keymap.ModLeftControl, true)
+	a.key(keymap.ModLeftAlt, true)
+	a.key(usageRight, true)
+	waitFor(t, "B active via hotkey", func() bool { return b.active() == b.ID() })
+	waitMoveTo(t, b, 1280, 720) // centre of B's primary display
+	a.key(usageRight, false)
+	a.key(keymap.ModLeftAlt, false)
+	a.key(keymap.ModLeftControl, false)
 }

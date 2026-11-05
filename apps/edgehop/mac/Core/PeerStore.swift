@@ -70,8 +70,20 @@ final class PeerStore: TrustStore {
         var needsSave = true
         if FileManager.default.fileExists(atPath: url.path) {
             let data = try Data(contentsOf: url)
-            loaded = try JSONDecoder().decode(ConfigFile.self, from: data)
-            needsSave = false
+            do {
+                loaded = try JSONDecoder().decode(ConfigFile.self, from: data)
+                needsSave = false
+            } catch {
+                // Reviewer note: a config we cannot parse used to abort the whole store, and
+                // the app then ran on an in-memory one — so a pairing made afterwards was
+                // silently forgotten on quit. Keep the broken file for inspection and carry
+                // on with defaults that ARE written through.
+                let backup = url.appendingPathExtension("bad")
+                try? FileManager.default.removeItem(at: backup)
+                try? FileManager.default.moveItem(at: url, to: backup)
+                Log.error("PeerStore: \(PeerStore.configFile) is unreadable (\(error)); kept it as \(backup.lastPathComponent) and started fresh",
+                          category: "store")
+            }
         }
         if loaded.version == 0 {
             loaded.version = 1
@@ -198,6 +210,28 @@ final class PeerStore: TrustStore {
         guard let index = config.peers.firstIndex(where: { $0.id == id }),
               config.peers[index].lastAddr != addr else { return }
         config.peers[index].lastAddr = addr
+        saveLocked()
+    }
+
+    /// The displays each paired peer last reported (spec §4: an offline machine still draws
+    /// on the canvas and its boundaries still exist).
+    var peerDisplays: [String: [Display]] {
+        lock.lock()
+        defer { lock.unlock() }
+        var out: [String: [Display]] = [:]
+        for peer in config.peers where !peer.displays.isEmpty {
+            out[peer.id] = peer.displays
+        }
+        return out
+    }
+
+    /// Remembers the monitors `id` last reported.
+    func setPeerDisplays(_ id: String, _ displays: [Display]) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let index = config.peers.firstIndex(where: { $0.id == id }),
+              config.peers[index].displays != displays else { return }
+        config.peers[index].displays = displays
         saveLocked()
     }
 

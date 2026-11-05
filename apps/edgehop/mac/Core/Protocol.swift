@@ -39,6 +39,8 @@ enum Wire {
     static let tPong = "pong"
     static let tSecureInput = "secure_input"
     static let tError = "error"
+    /// Shake to locate (spec §6): asks the active machine to flash a ring at its cursor.
+    static let tLocate = "locate"
 
     // MARK: - Control messages
 
@@ -62,35 +64,66 @@ enum Wire {
         }
     }
 
-    /// `layout`: newest `updatedAt` wins.
+    /// `layout`: newest `updatedAt` wins. A v2 sender fills both `machines` (the canvas,
+    /// spec §4) and `tiles` (derived, so v1 peers keep working).
     struct LayoutMessage: Codable {
         var t: String
         var updatedAt: Int64?
+        var machines: [Layout.Placement]?
         var tiles: [Layout.Tile]?
 
         init(layout: Layout) {
             t = Wire.tLayout
             updatedAt = layout.updatedAt
+            machines = layout.machines
             tiles = layout.tiles
         }
 
         var layout: Layout {
-            Layout(updatedAt: updatedAt ?? 0, tiles: tiles ?? [])
+            Layout(updatedAt: updatedAt ?? 0, machines: machines ?? [], tiles: tiles ?? [])
         }
     }
 
-    /// Where the cursor appears on the newly active machine.
-    struct Enter: Codable {
-        var edge: Edge
-        var frac: Double
+    /// `{x, y}` — the `enter.pt` of spec §3 rule 4.
+    struct PointXY: Codable {
+        var x: Int
+        var y: Int
 
-        init(edge: Edge, frac: Double) {
-            self.edge = edge
-            self.frac = frac
+        init(_ p: Geometry.Point) {
+            x = p.x
+            y = p.y
+        }
+
+        var point: Geometry.Point {
+            Geometry.Point(x: x, y: y)
         }
 
         private enum CodingKeys: String, CodingKey {
-            case edge, frac
+            case x, y
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            x = try container.decodeIfPresent(Int.self, forKey: .x) ?? 0
+            y = try container.decodeIfPresent(Int.self, forKey: .y) ?? 0
+        }
+    }
+
+    /// Where the cursor appears on the newly active machine. `pt` (spec §3) is exact, in the
+    /// receiver's own desktop coordinates; `edge` + `frac` remain for v1 receivers.
+    struct Enter: Codable {
+        var edge: Edge
+        var frac: Double
+        var pt: PointXY?
+
+        init(edge: Edge, frac: Double, pt: Geometry.Point? = nil) {
+            self.edge = edge
+            self.frac = frac
+            self.pt = pt.map(PointXY.init)
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case edge, frac, pt
         }
 
         /// An unknown edge name decodes to `nil` at the call site (`Active.enter` is optional).
@@ -98,6 +131,25 @@ enum Wire {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             edge = try container.decode(Edge.self, forKey: .edge)
             frac = try container.decodeIfPresent(Double.self, forKey: .frac) ?? 0
+            pt = try? container.decodeIfPresent(PointXY.self, forKey: .pt)
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(edge, forKey: .edge)
+            try container.encode(frac, forKey: .frac)
+            if let pt {
+                try container.encode(pt, forKey: .pt)
+            }
+        }
+    }
+
+    /// `locate` (spec §6): no payload beyond `t`.
+    struct Locate: Codable {
+        var t: String
+
+        init() {
+            t = Wire.tLocate
         }
     }
 

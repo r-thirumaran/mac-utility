@@ -52,7 +52,7 @@ func TestDecodeRoundTrip(t *testing.T) {
 	if err != nil || m.KeyText != "hi" || !m.IsInput() {
 		t.Fatalf("key_text: %+v %v", m, err)
 	}
-	ctl := MustControl(ActiveMsg{T: TActive, ID: "b", From: "a", Enter: &Enter{EdgeLeft, 0.5}, Buttons: 1, Modifiers: 2, Seq: 9})
+	ctl := MustControl(ActiveMsg{T: TActive, ID: "b", From: "a", Enter: &Enter{Edge: EdgeLeft, Frac: 0.5}, Buttons: 1, Modifiers: 2, Seq: 9})
 	if ctl[0] != TypeControl {
 		t.Fatalf("control type byte %x", ctl[0])
 	}
@@ -114,9 +114,32 @@ func TestControlJSONShapes(t *testing.T) {
 			t.Errorf("displays entry lacks %q: %v", k, d)
 		}
 	}
+	// A v1 sender's `layout` has tiles only; `machines` is omitted so the
+	// bytes a v1 peer sees are unchanged.
 	lay := MustControl(LayoutMsg{T: TLayout, UpdatedAt: 5, Tiles: []Tile{{ID: "a", Col: 1, Row: 2}}})
 	if string(lay[1:]) != `{"t":"layout","updatedAt":5,"tiles":[{"id":"a","col":1,"row":2}]}` {
 		t.Errorf("layout JSON = %s", lay[1:])
+	}
+	// A v2 sender fills both models (§6 `layout`).
+	lay = MustControl(NewLayoutMsg(Layout{UpdatedAt: 5, Machines: []Placement{{ID: "a", X: 0, Y: -20}}, Tiles: []Tile{{ID: "a", Col: 1, Row: 2}}}))
+	want := `{"t":"layout","updatedAt":5,"machines":[{"id":"a","x":0,"y":-20}],"tiles":[{"id":"a","col":1,"row":2}]}`
+	if string(lay[1:]) != want {
+		t.Errorf("v2 layout JSON = %s", lay[1:])
+	}
+	// `active` carries the exact entry point as enter.pt, lower case.
+	act := MustControl(ActiveMsg{T: TActive, ID: "b", From: "a", Enter: &Enter{Edge: EdgeLeft, Frac: 0.25, Pt: &Point{X: 1, Y: 270}}, Seq: 2})
+	want = `{"t":"active","id":"b","from":"a","enter":{"edge":"left","frac":0.25,"pt":{"x":1,"y":270}},"buttons":0,"modifiers":0,"seq":2}`
+	if string(act[1:]) != want {
+		t.Errorf("active with pt JSON = %s", act[1:])
+	}
+	var am ActiveMsg
+	m2, err := Decode(act)
+	if err != nil || m2.ParseControl(&am) != nil || am.Enter == nil || am.Enter.Pt == nil || *am.Enter.Pt != (Point{1, 270}) {
+		t.Errorf("enter.pt round trip = %+v %v", am.Enter, err)
+	}
+	loc := MustControl(LocateMsg{T: TLocate})
+	if string(loc[1:]) != `{"t":"locate"}` {
+		t.Errorf("locate JSON = %s", loc[1:])
 	}
 	ping := MustControl(PingMsg{T: TPing, TS: 123})
 	if string(ping[1:]) != `{"t":"ping","ts":123}` {

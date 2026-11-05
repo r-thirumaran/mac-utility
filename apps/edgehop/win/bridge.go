@@ -25,6 +25,10 @@ const autostartName = "Edgehop"
 // logKeep is how many log lines edgehop.log.recent returns.
 const logKeep = 300
 
+// codeInvalidLayout is the bridge error code for a layout that breaks the
+// canvas rules (docs/edgehop-protocol.md §6 `layout`).
+const codeInvalidLayout = "invalid_layout"
+
 // uiState is the edgehop.state payload: the core state plus what only the
 // app layer knows (the pairing in progress, launch at login, the version).
 type uiState struct {
@@ -320,6 +324,10 @@ func (a *app) appOpenSettingsPane(_ context.Context, raw json.RawMessage) (any, 
 	return nil, nil
 }
 
+// layoutSet takes a canvas ({machines:[{id,x,y}]}) or, for one release, a
+// legacy tile grid ({tiles:[{id,col,row}]}); the node converts between the
+// two and derives the other model. It answers with the new state, whose
+// `layout` field holds the stamped layout.
 func (a *app) layoutSet(_ context.Context, raw json.RawMessage) (any, error) {
 	p, err := bridge.Params[struct {
 		Layout core.Layout `json:"layout"`
@@ -328,9 +336,10 @@ func (a *app) layoutSet(_ context.Context, raw json.RawMessage) (any, error) {
 		return nil, err
 	}
 	if err := a.node.SetLayout(p.Layout); err != nil {
-		return nil, bridge.Errorf(bridge.CodeInvalidParams, "%v", err)
+		return nil, bridge.Errorf(codeInvalidLayout, "%v", err)
 	}
-	return map[string]any{"layout": a.node.Layout()}, nil
+	a.emitState()
+	return a.state(), nil
 }
 
 func (a *app) pairStart(_ context.Context, raw json.RawMessage) (any, error) {
