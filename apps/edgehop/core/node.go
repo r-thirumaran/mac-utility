@@ -174,6 +174,7 @@ type Node struct {
 	edgeSince         time.Time
 	entryEdge         Edge  // edge control arrived through; disarmed until the cursor leaves it (ReentryGuardPx)
 	entryPoint        Point // where the cursor was placed on arrival
+	cursorParked      bool  // own pointer locked while this machine's mouse drives another
 	edgeTimer         *time.Timer
 	lastNamedActive   time.Time
 	lastRemoteInput   time.Time
@@ -916,9 +917,27 @@ func (n *Node) setRemoteActive(id string) {
 	if wasSelf {
 		n.releaseModifiers()
 		if n.settings.LockCursorWhileRemote && n.cfg.Capturer != nil {
+			n.cursorParked = true
 			n.after(func() { n.cfg.Capturer.LockCursor(true) })
 		}
 	}
+}
+
+// parkForForwarding (protocol §6.3): a machine whose OWN mouse starts driving
+// the active machine locks its pointer too, so it does not keep moving on its
+// own screen while the clicks go elsewhere. Keyboard-only use parks nothing.
+func (n *Node) parkForForwarding(ev input.Event) {
+	if n.cursorParked || !n.settings.LockCursorWhileRemote || n.cfg.Capturer == nil {
+		return
+	}
+	switch ev.Kind {
+	case input.MouseMove, input.MouseButton, input.Scroll:
+	default:
+		return
+	}
+	n.cursorParked = true
+	cap := n.cfg.Capturer
+	n.after(func() { cap.LockCursor(true) })
 }
 
 // becomeActiveLocal performs §6.1 rule 4 after n.active was set to self.
@@ -937,6 +956,7 @@ func (n *Node) becomeActiveLocal(enter *Enter, buttons, mods uint8) {
 		p = Centre(n.displays)
 	}
 	n.lastCursor = p
+	n.cursorParked = false
 	n.entryEdge, n.entryPoint = "", p
 	if enter != nil && enter.Edge.Valid() {
 		n.entryEdge = enter.Edge
@@ -1139,6 +1159,7 @@ func (n *Node) localInput(ev input.Event) bool {
 		}
 		return false
 	}
+	n.parkForForwarding(ev)
 	n.forward(ev)
 	return true
 }

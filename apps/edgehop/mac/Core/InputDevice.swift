@@ -14,6 +14,10 @@ protocol InputDevice: AnyObject {
     func stop()
     /// Parks the cursor at `centre` and hides it (`true`) or releases it (`false`). Best effort.
     func lockCursor(_ lock: Bool, centre: Geometry.Point)
+    /// While parked: if the OS let the pointer drift (it can re-attach it to the mouse when
+    /// another app becomes active), park it again and return the warp vector (centre − p),
+    /// so the caller can take that warp back out of the next reported delta. nil = no drift.
+    func reparkIfDrifted(at p: Geometry.Point, centre: Geometry.Point) -> (dx: Int, dy: Int)?
     func displays() -> [Display]
     func onDisplaysChanged(_ handler: @escaping @MainActor () -> Void)
     /// macOS secure input (a password field has the keyboard).
@@ -30,4 +34,8 @@ protocol InputDevice: AnyObject {
     func key(wire: Int, down: Bool, mods: UInt8)
     func text(_ text: String)
     func cursorPosition() -> Geometry.Point
+}
+
+extension InputDevice {
+    func reparkIfDrifted(at p: Geometry.Point, centre: Geometry.Point) -> (dx: Int, dy: Int)? { nil }
 }

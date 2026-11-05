@@ -58,6 +58,10 @@ final class MacInputDevice: InputDevice {
         }
     }
 
+    func reparkIfDrifted(at p: Geometry.Point, centre: Geometry.Point) -> (dx: Int, dy: Int)? {
+        cursorLock.reparkIfDrifted(at: p, centre: centre)
+    }
+
     func displays() -> [Display] {
         Displays.current()
     }

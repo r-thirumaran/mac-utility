@@ -102,6 +102,9 @@ final class Node {
     /// out so the first move sent to the new machine is the hand's, not the warp's.
     private var lastLocalPoint = Geometry.Point(x: 0, y: 0)
     private var warpCompensation: (dx: Int, dy: Int, at: Date)?
+    /// This Mac's own pointer is parked (detached, centred, hidden) while its mouse drives
+    /// another machine.
+    private var localCursorParked = false
     private var edgeTimer: DispatchWorkItem?
     private var lastNamedActive = Date.distantPast
     private var lastRemoteInput: Date?
@@ -605,8 +608,24 @@ final class Node {
                 let centre = Geometry.centre(displays)
                 warpCompensation = (centre.x - lastLocalPoint.x, centre.y - lastLocalPoint.y, Date())
                 device.lockCursor(true, centre: centre)
+                localCursorParked = true
             }
         }
+    }
+
+    /// Spec §6.3: a machine whose OWN mouse starts driving the active machine parks its
+    /// pointer too, not only the machine control left. Otherwise its pointer keeps moving
+    /// on its own screen while the clicks go elsewhere. Keyboard-only use parks nothing.
+    private func parkForForwarding(_ event: InputEvent) {
+        guard !localCursorParked, settings.lockCursorWhileRemote,
+              event.kind == .mouseMove || event.kind == .mouseButton || event.kind == .scroll,
+              let device = config.device else { return }
+        let centre = Geometry.centre(displays)
+        if event.kind == .mouseMove {
+            warpCompensation = (centre.x - event.x, centre.y - event.y, Date())
+        }
+        device.lockCursor(true, centre: centre)
+        localCursorParked = true
     }
 
     /// §6.1 rule 4 after `active` was set to self. Spec §3 rule 4: an `enter.pt` places the
@@ -629,6 +648,7 @@ final class Node {
         entryPoint = point
         guard let device = config.device else { return }
         device.lockCursor(false, centre: Geometry.centre(displays))
+        localCursorParked = false
         device.moveTo(x: point.x, y: point.y)
         for bit in 0..<8 where mods & (1 << UInt8(bit)) != 0 {
             device.key(wire: 0xE0 + bit, down: true, mods: mods)
@@ -760,6 +780,12 @@ final class Node {
                 checkEdge(Geometry.Point(x: event.x, y: event.y))
             }
             return false
+        }
+        parkForForwarding(event)
+        if localCursorParked, event.kind == .mouseMove, let device = config.device,
+           let warp = device.reparkIfDrifted(at: Geometry.Point(x: event.x, y: event.y),
+                                             centre: Geometry.centre(displays)) {
+            warpCompensation = (warp.dx, warp.dy, Date())
         }
         forward(event)
         return true

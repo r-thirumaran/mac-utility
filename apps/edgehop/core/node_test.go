@@ -563,3 +563,34 @@ func TestStubPeerDisplaysPersistAndDrawOffline(t *testing.T) {
 		t.Fatal("state layout has no machines field")
 	}
 }
+
+// A machine whose own mouse drives the active machine parks its pointer even
+// though control never left it (it was not active); keyboard use alone does not.
+func TestStubForwardingOwnMouseParksPointer(t *testing.T) {
+	_, ms := stubMachines(t, "linux", "linux")
+	a, b := ms[0], ms[1]
+	if err := a.node.SetLayout(rowLayout(a, b)); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "layout on B", func() bool { return len(b.node.Layout().Machines) == 2 })
+
+	// B is told A is active without ever having been active itself.
+	b.node.mu.Lock()
+	b.node.active = a.ID()
+	b.node.cursorParked = false
+	b.node.mu.Unlock()
+	if b.dev.Locked() {
+		t.Fatal("precondition: B's pointer already locked")
+	}
+
+	b.key(0x04, true)
+	b.key(0x04, false)
+	time.Sleep(20 * time.Millisecond)
+	if b.dev.Locked() {
+		t.Fatal("keyboard-only forwarding parked the pointer")
+	}
+
+	b.move(7, 3)
+	waitFor(t, "B parks its pointer while its mouse drives A", b.dev.Locked)
+	waitFor(t, "the move still reaches A", func() bool { return a.count("MoveRelative") >= 1 })
+}
